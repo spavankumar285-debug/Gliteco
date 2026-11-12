@@ -1089,7 +1089,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
                           onClick={() => downloadStandaloneApp(htmlCode)}
                           className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
                         >
-                          <Download className="w-3.5 h-3.5"/> Save App to Device</button><a href="https://www.hostinger.in" target="_blank" rel="noreferrer" class="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-medium">Host This Website Online</a>
+                          <Download className="w-3.5 h-3.5"/> Save App to Device</button><a href="https://www.hostinger.in" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-medium">Host This Website Online</a>
                       </div>
                     </div>
                   )}
