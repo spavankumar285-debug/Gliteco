@@ -8,7 +8,7 @@ async function generateCloudflareImage(
   height = 1024,
   seed?: number
 ): Promise<string> {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CLOUDFLARE_API_ACCOUNT_ID);
   const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 
   if (!accountId || !apiToken) {
