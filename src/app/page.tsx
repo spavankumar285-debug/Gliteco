@@ -461,25 +461,36 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
     stopSpeaking();
 
+    const refImg = attachments.find((a) => a.dataUrl?.startsWith('data:image/'))?.dataUrl;
+
     const isVideoGenRequest =
-      attachments.length === 0 &&
-      (mode === 'video' ||
-        /\b(video|videos|animation|animated|reel|movie|clip|commercial)\b/i.test(trimmed));
+      mode === 'video' ||
+      /\b(generate|create|make|render|produce|animate|turn|convert|show|give|send|want|need)\b.*\b(video|videos|animation|animated|reel|movie|clip|commercial|motion)\b/i.test(
+        trimmed
+      );
 
     if (isVideoGenRequest) {
       setInput('');
+      setAttachments([]);
       setIsGeneratingMedia(true);
       try {
         const res = await fetch('/api/media', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: trimmed, type: 'video' }),
+          body: JSON.stringify({
+            prompt: trimmed || 'walking confidently through a modern sunlit city street',
+            type: 'video',
+            referenceImage: refImg,
+          }),
         });
         const data = await res.json();
         if (!res.ok || !data.frames) throw new Error(data.error || 'Video generation failed');
-        setGeneratedVideos((prev) => [...prev, { id: String(Date.now()), prompt: trimmed, frames: data.frames }]);
+        setGeneratedVideos((prev) => [
+          ...prev,
+          { id: String(Date.now()), prompt: trimmed || 'Photo Motion Video', frames: data.frames },
+        ]);
       } catch (err: any) {
-        alert(err?.message || 'Could not generate video with Cloudflare Workers AI.');
+        alert(err?.message || 'Could not generate video.');
       } finally {
         setIsGeneratingMedia(false);
       }
@@ -487,29 +498,33 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     }
 
     const isImageGenRequest =
-      attachments.length === 0 &&
       mode !== 'dev' &&
       mode !== 'creator' &&
       mode !== 'search' &&
       (mode === 'image' ||
-        /\b(image|images|pic|pics|picture|pictures|photo|photos|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait|photorealistic|8k)\b/i.test(
+        /\b(generate|create|draw|make|design|render|paint|transform|put|place|dress|show|give|send|want|need)\b.*\b(image|images|pic|pics|picture|pictures|photo|photos|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait|photorealistic|8k)\b/i.test(
           trimmed
         ));
 
     if (isImageGenRequest) {
       setInput('');
+      setAttachments([]);
       setIsGeneratingMedia(true);
       try {
         const res = await fetch('/api/media', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: trimmed, type: 'image' }),
+          body: JSON.stringify({
+            prompt: trimmed || 'studio portrait with cinematic lighting',
+            type: 'image',
+            referenceImage: refImg,
+          }),
         });
         const data = await res.json();
         if (!res.ok || !data.url) throw new Error(data.error || 'Image generation failed');
-        setGeneratedImages((prev) => [...prev, { id: String(Date.now()), prompt: trimmed, url: data.url }]);
+        setGeneratedImages((prev) => [...prev, { id: String(Date.now()), prompt: trimmed || 'Reference Portrait', url: data.url }]);
       } catch (err: any) {
-        alert(err?.message || 'Could not generate image with Cloudflare Workers AI.');
+        alert(err?.message || 'Could not generate image.');
       } finally {
         setIsGeneratingMedia(false);
       }
