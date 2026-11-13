@@ -461,7 +461,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
     stopSpeaking();
 
-    const refImg = attachments.map((a: any) => a.preview || a.url || a.dataUrl).find((u: any) => typeof u === 'string' && u.startsWith('data:image/'));
+    const refImg = attachments.map((a: any) => a.preview || a.url || a.dataUrl).find((u: any) => typeof u === 'string' && u.startsWith('data:image/')) || [...messages].reverse().flatMap((m: any) => m.attachments || []).map((a: any) => a.preview || a.url || a.dataUrl).find((u: any) => typeof u === 'string' && u.startsWith('data:image/'));
 
     const isVideoGenRequest =
       mode === 'video' ||
