@@ -60,7 +60,8 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model,
         messages: [systemPrompt, ...sanitizedMessages],
-        temperature: 0.7,
+        temperature: 0.3,
+      reasoning_effort: 'none',
         max_tokens: 2048,
       }),
     });
