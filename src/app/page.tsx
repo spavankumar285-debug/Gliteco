@@ -168,13 +168,11 @@ function CinematicVideoCard({ video }: { video: GeneratedVideoItem }) {
               />
             ))}
 
-            {/* Subtitle Overlay */}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-8">
               <p className="text-xs sm:text-sm font-medium text-white drop-shadow">{currentFrame?.caption}</p>
             </div>
           </div>
 
-          {/* Timeline & Controls */}
           <div className="flex items-center gap-2 pt-0.5">
             <button
               type="button"
@@ -294,7 +292,6 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
     const title = firstText.slice(0, 42) + (firstText.length > 42 ? '...' : '');
 
-    // Strip heavy base64 image uploads before saving to localStorage while keeping all text
     const lightweightMessages = messages.map((m) => ({
       ...m,
       parts: m.parts.filter((p: any) => p.type === 'text'),
@@ -463,7 +460,6 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
     stopSpeaking();
 
-    // 1. Single-Prompt AI Video Generator (4-Scene Cinematic HD Motion Video)
     const isVideoGenRequest =
       attachments.length === 0 &&
       (mode === 'video' ||
@@ -475,7 +471,10 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
       const cleanTopic =
         trimmed
           .replace(/\b(can you|please|generate|create|make|render|produce)\b/gi, '')
-          .replace(/\b(an?|the)?\s*(short|hd|4k|ai|animated)?\s*(video|animation|reel|movie|clip|commercial)\s*(of|about|for|showing)?\b/gi, '')
+          .replace(
+            /\b(an?|the)?\s*(short|hd|4k|ai|animated)?\s*(video|animation|reel|movie|clip|commercial)\s*(of|about|for|showing)?\b/gi,
+            ''
+          )
           .replace(/\s+/g, ' ')
           .trim() || trimmed;
 
@@ -503,7 +502,6 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
       return;
     }
 
-    // 2. Single-Prompt HD Image & Logo Generator (Triggers for ANY image/logo/photo prompt)
     const isImageGenRequest =
       attachments.length === 0 &&
       (mode === 'image' ||
@@ -518,7 +516,6 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
       return;
     }
 
-    // 3. Attachments + Standard / App Builder Chat
     const docSections = attachments
       .filter((a) => a.kind === 'document' && a.extractedText)
       .map((a) => `\n\n[Uploaded File: ${a.name}]\n${a.extractedText}`)

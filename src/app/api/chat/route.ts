@@ -136,7 +136,6 @@ export async function POST(req: Request) {
       m.parts?.some((p: any) => p.type === 'file' && p.mediaType?.startsWith('image/'))
     );
 
-    // Direct HD Image & Multi-Scene Video fallback if triggered directly in chat
     const isDirectVideoQuery =
       !hasImages &&
       (mode === 'video' ||
@@ -189,7 +188,6 @@ export async function POST(req: Request) {
     }
 
     const { chatModel, visionModel } = await resolveGroqModels();
-
     const modelId = hasImages ? visionModel : chatModel;
 
     const modeInstructions: Record<string, string> = {
