@@ -464,9 +464,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     const isVideoGenRequest =
       attachments.length === 0 &&
       (mode === 'video' ||
-        /\b(generate|create|make|render|produce|show|give|send|want|need)\b.*\b(video|videos|animation|animated|reel|movie|clip|commercial)\b/i.test(
-          trimmed
-        ));
+        /\b(video|videos|animation|animated|reel|movie|clip|commercial)\b/i.test(trimmed));
 
     if (isVideoGenRequest) {
       setInput('');
@@ -490,8 +488,11 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
     const isImageGenRequest =
       attachments.length === 0 &&
+      mode !== 'dev' &&
+      mode !== 'creator' &&
+      mode !== 'search' &&
       (mode === 'image' ||
-        /\b(generate|create|draw|make|design|render|paint|show|give|send|want|need)\b.*\b(image|images|pic|pics|picture|pictures|photo|photos|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait)\b/i.test(
+        /\b(image|images|pic|pics|picture|pictures|photo|photos|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait|photorealistic|8k)\b/i.test(
           trimmed
         ));
 
