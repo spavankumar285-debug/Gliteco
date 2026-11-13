@@ -25,10 +25,7 @@ async function generateCloudflareImage(
       },
       body: JSON.stringify({
         prompt,
-        steps: 6,
-        width,
-        height,
-        ...(typeof seed === 'number' ? { seed } : {}),
+        steps: 6,...(typeof seed === 'number' ? { seed } : {}),
       }),
     }
   );
