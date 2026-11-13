@@ -459,7 +459,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
           setSessions(parsed);
           const latest = parsed[0];
           setCurrentSessionId(latest.id);
-          setMessages(latest.messages || []);
+          setMessages((latest.messages || []).filter((m: any) => Array.isArray(m?.parts) ? m.parts.some((p: any) => p?.type === "text" ? String(p.text || "").trim().length > 0 : Boolean(p?.url || p?.data)) : Boolean(m?.content)));
           setGeneratedImages(latest.images || []);
         }
       }
@@ -472,7 +472,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     const firstUserMsg = messages.find((m) => m.role === 'user');
     const firstText = firstUserMsg ? firstUserMsg.parts.filter((p) => p.type === 'text').filter(Boolean).map((p) => p.text).join('') : generatedImages[0]?.prompt || 'New Conversation';
     const title = firstText.slice(0, 42) + (firstText.length > 42 ? '...' : '');
-    const lightweightMessages = messages.filter(m=>m&&typeof m.content==="string"&&m.content.trim().length>0).map((m) => ({
+    const lightweightMessages = messages.map((m) => ({
       ...m,
       parts: m.parts.map(()=>({type:'text',text:''})),
     }));
@@ -595,7 +595,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
       lastImgId: session.images?.[session.images.length - 1]?.id,
     });
     setCurrentSessionId(session.id);
-    setMessages(session.messages || []);
+    setMessages((session.messages || []).filter((m: any) => Array.isArray(m?.parts) ? m.parts.some((p: any) => p?.type === "text" ? String(p.text || "").trim().length > 0 : Boolean(p?.url || p?.data)) : Boolean(m?.content)));
     setGeneratedImages(session.images || []);
     setAttachments([]);
     setShowHistory(false);
@@ -1004,7 +1004,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
             </div>
           )}
 
-          {messages.filter(m=>m&&typeof m.content==="string"&&m.content.trim().length>0).map((m) => {
+          {messages.map((m) => {
             const textContent = m.parts
               .filter((part) => part.type === 'text')
               .map((part) => part.text)
