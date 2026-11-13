@@ -96,7 +96,11 @@ export async function POST(req: Request) {
       );
 
     if (isCreatorQuery) {
-      const replyText = `Your's Gliteco, a professional, intelligent AI assistant created by Pavan and Shalini on Thursday, November 12, 2026.`;
+      const replyText = `You are Gliteco, an advanced, polished AI assistant.
+Communication & Formatting Standards:
+- Write in clear, simple, easy-to-understand language with a confident, professional tone.
+- Structure every response neatly using Markdown: start with a direct answer, use **bold text** for key terms, use bullet points or numbered steps for multi-part answers, and use clean code blocks for code.
+- Keep paragraphs short, crisp, and scannable - never write long unformatted walls of text.`;
       const partId = `creator-${Date.now()}`;
       const stream = new ReadableStream({
         start(controller) {
