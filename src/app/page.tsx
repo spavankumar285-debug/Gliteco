@@ -229,6 +229,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [isGeneratingMedia, setIsGeneratingMedia] = useState(false);
 
   const lastAutoOpenedId = useRef<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -454,9 +455,9 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     }
   }, [status, messages]);
 
-  const submitMessage = () => {
+  const submitMessage = async () => {
     const trimmed = input.trim();
-    if ((!trimmed && attachments.length === 0) || isLoading || isProcessingFile) return;
+    if ((!trimmed && attachments.length === 0) || isLoading || isProcessingFile || isGeneratingMedia) return;
 
     stopSpeaking();
 
@@ -468,37 +469,22 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
         ));
 
     if (isVideoGenRequest) {
-      const cleanTopic =
-        trimmed
-          .replace(/\b(can you|please|generate|create|make|render|produce)\b/gi, '')
-          .replace(
-            /\b(an?|the)?\s*(short|hd|4k|ai|animated)?\s*(video|animation|reel|movie|clip|commercial)\s*(of|about|for|showing)?\b/gi,
-            ''
-          )
-          .replace(/\s+/g, ' ')
-          .trim() || trimmed;
-
-      const scenes = [
-        {
-          url: buildImageUrl(`${cleanTopic}, wide establishing cinematic shot, golden hour lighting`, 1280, 720, 11),
-          caption: `Scene 1 • Establishing view: ${cleanTopic}`,
-        },
-        {
-          url: buildImageUrl(`${cleanTopic}, dynamic close-up action shot, dramatic depth of field`, 1280, 720, 22),
-          caption: `Scene 2 • Close-up perspective: ${cleanTopic}`,
-        },
-        {
-          url: buildImageUrl(`${cleanTopic}, futuristic aerial drone view, vibrant atmosphere`, 1280, 720, 33),
-          caption: `Scene 3 • Aerial cinematic angle: ${cleanTopic}`,
-        },
-        {
-          url: buildImageUrl(`${cleanTopic}, epic grand finale shot, ultra detailed 8k`, 1280, 720, 44),
-          caption: `Scene 4 • Finale: ${cleanTopic}`,
-        },
-      ];
-
-      setGeneratedVideos((prev) => [...prev, { id: String(Date.now()), prompt: trimmed, frames: scenes }]);
       setInput('');
+      setIsGeneratingMedia(true);
+      try {
+        const res = await fetch('/api/media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: trimmed, type: 'video' }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.frames) throw new Error(data.error || 'Video generation failed');
+        setGeneratedVideos((prev) => [...prev, { id: String(Date.now()), prompt: trimmed, frames: data.frames }]);
+      } catch (err: any) {
+        alert(err?.message || 'Could not generate video with Cloudflare Workers AI.');
+      } finally {
+        setIsGeneratingMedia(false);
+      }
       return;
     }
 
@@ -510,9 +496,22 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
         ));
 
     if (isImageGenRequest) {
-      const url = buildImageUrl(trimmed, 1024, 1024, 0);
-      setGeneratedImages((prev) => [...prev, { id: String(Date.now()), prompt: trimmed, url }]);
       setInput('');
+      setIsGeneratingMedia(true);
+      try {
+        const res = await fetch('/api/media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: trimmed, type: 'image' }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.error || 'Image generation failed');
+        setGeneratedImages((prev) => [...prev, { id: String(Date.now()), prompt: trimmed, url: data.url }]);
+      } catch (err: any) {
+        alert(err?.message || 'Could not generate image with Cloudflare Workers AI.');
+      } finally {
+        setIsGeneratingMedia(false);
+      }
       return;
     }
 
