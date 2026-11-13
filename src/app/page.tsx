@@ -472,7 +472,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     const firstUserMsg = messages.find((m) => m.role === 'user');
     const firstText = firstUserMsg ? firstUserMsg.parts.filter((p) => p.type === 'text').filter(Boolean).map((p) => p.text).join('') : generatedImages[0]?.prompt || 'New Conversation';
     const title = firstText.slice(0, 42) + (firstText.length > 42 ? '...' : '');
-    const lightweightMessages = messages.map((m) => ({
+    const lightweightMessages = messages.filter(m=>m&&typeof m.content==="string"&&m.content.trim().length>0).map((m) => ({
       ...m,
       parts: m.parts.map(()=>({type:'text',text:''})),
     }));
@@ -1004,7 +1004,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
             </div>
           )}
 
-          {messages.map((m) => {
+          {messages.filter(m=>m&&typeof m.content==="string"&&m.content.trim().length>0).map((m) => {
             const textContent = m.parts
               .filter((part) => part.type === 'text')
               .map((part) => part.text)
