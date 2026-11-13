@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     );
 
     // Groq's active multimodal vision model is qwen/qwen3.8-27b; text-only models require string content
-    const model = hasImage ? 'qwen/qwen3.8-27b' : 'llama-3.3-70b-versatile';
+    const model = hasImage ? 'qwen/qwen3.8-27b' : 'openai/gpt-oss-120b';
 
     const sanitizedMessages = incoming.map((m: any) => {
       if (typeof m?.content === 'string') {
