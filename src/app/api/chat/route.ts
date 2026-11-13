@@ -96,7 +96,7 @@ export async function POST(req: Request) {
       );
 
     if (isCreatorQuery) {
-      const replyText = `Your's Gliteco, a professional, intelligent AI assistant created by Pavan and Shalini on Thursday, November 12, 2026's current date when the user specifically asks for today's date or time.'s date or time. Today's date is ${todayDate}.`;
+      const replyText = `Your's Gliteco, a professional, intelligent AI assistant created by Pavan and Shalini on Thursday, November 12, 2026.`;
       const partId = `creator-${Date.now()}`;
       const stream = new ReadableStream({
         start(controller) {
