@@ -95,6 +95,9 @@ const markdownComponents: any = {
   code: ({ children }: any) => (
     <code className="px-1.5 py-0.5 rounded bg-zinc-800 text-indigo-300 text-xs font-mono">{children}</code>
   ),
+  img: ({ src, alt }: any) => (
+    <img src={src} alt={alt || 'Generated Visual'} className="rounded-xl w-full max-w-md my-2 border border-zinc-700 shadow-lg" />
+  ),
 };
 
 const markdownPlugins = [remarkGfm];
@@ -106,7 +109,10 @@ function buildImageUrl(rawPrompt: string, width = 1024, height = 1024, seedOffse
         /\b(can you|please|could you|generate|create|draw|make|design|render|show me|give me)\b/gi,
         ''
       )
-      .replace(/\b(an?|the)\s+(hd|4k|realistic|real|high quality)?\s*(image|picture|photo|photograph|logo|poster|banner|illustration|wallpaper|art)\s*(of|for|showing|with)?\b/gi, '')
+      .replace(
+        /\b(an?|the)\s+(hd|4k|realistic|real|high quality)?\s*(image|picture|photo|photograph|logo|poster|banner|illustration|wallpaper|art)\s*(of|for|showing|with)?\b/gi,
+        ''
+      )
       .replace(/\s+/g, ' ')
       .trim() || rawPrompt;
 
@@ -824,7 +830,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
               </p>
               <div className="flex flex-wrap justify-center gap-2 pt-2">
                 {[
-                  'Create an image of a futuristic glass Microsoft campus at golden sunset',
+                  'Create an image of a futuristic glass tech campus at golden sunset',
                   'Create a video of a sleek electric sports car driving through Tokyo at night',
                   'Design a complete food delivery app with menu, cart & checkout',
                   'Create a 6-slide presentation on the future of artificial intelligence',
