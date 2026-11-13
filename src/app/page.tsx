@@ -19,6 +19,7 @@ import {
   FileText,
   Presentation,
   Play,
+  Pause,
   X,
   Smartphone,
   Monitor,
@@ -37,9 +38,16 @@ import {
   ArrowRight,
   LogOut,
   CheckCircle2,
+  Video,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import PptxGenJS from 'pptxgenjs';
+
+type GeneratedVideoItem = {
+  id: string;
+  prompt: string;
+  frames: { url: string; caption: string }[];
+};
 
 type SavedSession = {
   id: string;
@@ -47,6 +55,7 @@ type SavedSession = {
   updatedAt: number;
   messages: any[];
   images: { id: string; prompt: string; url: string }[];
+  videos?: GeneratedVideoItem[];
 };
 
 type PendingAttachment = {
@@ -65,13 +74,16 @@ type GlitecoUser = {
 };
 
 const markdownComponents: any = {
-  h1: ({ children }: any) => <h1 className="text-lg font-bold text-white mt-2">{children}</h1>,
-  h2: ({ children }: any) => <h2 className="text-base font-bold text-indigo-300 mt-2">{children}</h2>,
-  h3: ({ children }: any) => <h3 className="text-sm font-bold text-indigo-300 mt-1">{children}</h3>,
-  p: ({ children }: any) => <p className="leading-relaxed">{children}</p>,
-  ul: ({ children }: any) => <ul className="list-disc pl-5 space-y-1">{children}</ul>,
-  ol: ({ children }: any) => <ol className="list-decimal pl-5 space-y-1">{children}</ol>,
+  h1: ({ children }: any) => <h1 className="text-lg font-bold text-white mt-3 mb-1">{children}</h1>,
+  h2: ({ children }: any) => <h2 className="text-base font-bold text-indigo-300 mt-3 mb-1">{children}</h2>,
+  h3: ({ children }: any) => <h3 className="text-sm font-bold text-indigo-300 mt-2 mb-0.5">{children}</h3>,
+  p: ({ children }: any) => <p className="leading-relaxed text-zinc-200">{children}</p>,
+  ul: ({ children }: any) => <ul className="list-disc pl-5 space-y-1.5 text-zinc-200">{children}</ul>,
+  ol: ({ children }: any) => <ol className="list-decimal pl-5 space-y-1.5 text-zinc-200">{children}</ol>,
   strong: ({ children }: any) => <strong className="font-semibold text-white">{children}</strong>,
+  blockquote: ({ children }: any) => (
+    <blockquote className="border-l-2 border-indigo-500 pl-3 italic text-zinc-300 my-2">{children}</blockquote>
+  ),
   table: ({ children }: any) => (
     <div className="overflow-x-auto my-2 rounded-xl border border-zinc-700">
       <table className="w-full text-left border-collapse text-xs">{children}</table>
@@ -87,305 +99,100 @@ const markdownComponents: any = {
 
 const markdownPlugins = [remarkGfm];
 
-export default function Home() {
-  const [mounted, setMounted] = useState(false);
-  const [user, setUser] = useState<GlitecoUser | null>(null);
+function buildImageUrl(rawPrompt: string, width = 1024, height = 1024, seedOffset = 0): string {
+  const cleaned =
+    rawPrompt
+      .replace(
+        /\b(can you|please|could you|generate|create|draw|make|design|render|show me|give me)\b/gi,
+        ''
+      )
+      .replace(/\b(an?|the)\s+(hd|4k|realistic|real|high quality)?\s*(image|picture|photo|photograph|logo|poster|banner|illustration|wallpaper|art)\s*(of|for|showing|with)?\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || rawPrompt;
+
+  const enhanced = `${cleaned}, ultra detailed, photorealistic, cinematic lighting, 8k resolution, sharp focus`;
+  const seed = Math.floor(Math.random() * 100000) + seedOffset;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent( enhanced )}?width=${width}&height=${height}&seed=${seed}&model=flux&nologo=true`;
+}
+
+function CinematicVideoCard({ video }: { video: GeneratedVideoItem }) {
+  const [frameIndex, setFrameIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [loadedCount, setLoadedCount] = useState(0);
 
   useEffect(() => {
-    setMounted(true);
-    try {
-      const savedUser = localStorage.getItem('gliteco_user_profile_v1');
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
-      }
-    } catch {}
-  }, []);
+    if (!isPlaying) return;
+    const timer = setInterval(() => {
+      setFrameIndex((prev) => (prev + 1) % video.frames.length);
+    }, 3200);
+    return () => clearInterval(timer);
+  }, [isPlaying, video.frames.length]);
 
-  if (!mounted) {
-    return <div className="h-screen bg-zinc-950" />;
-  }
-
-  const handleAuthSuccess = (profile: GlitecoUser) => {
-    setUser(profile);
-    try {
-      localStorage.setItem('gliteco_user_profile_v1', JSON.stringify(profile));
-    } catch {}
-  };
-
-  const handleSignOut = () => {
-    setUser(null);
-    try {
-      localStorage.removeItem('gliteco_user_profile_v1');
-    } catch {}
-  };
-
-  if (!user) {
-    return <GlitecoAuthScreen onComplete={handleAuthSuccess} />;
-  }
-
-  return <GlitecoStudio user={user} onSignOut={handleSignOut} />;
-}
-
-function GlitecoAuthScreen({ onComplete }: { onComplete: (u: GlitecoUser) => void }) {
-  const brandName = process.env.NEXT_PUBLIC_APP_NAME || 'Gliteco';
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [formError, setFormError] = useState('');
-
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError('');
-
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !trimmedEmail.includes('@')) {
-      setFormError('Please enter a valid email address.');
-      return;
-    }
-    if (password.trim().length < 4) {
-      setFormError('Please enter a password (at least 4 characters).');
-      return;
-    }
-
-    const displayName =
-      name.trim() ||
-      trimmedEmail
-        .split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, (l) => l.toUpperCase());
-
-    onComplete({
-      name: displayName,
-      email: trimmedEmail,
-      isGuest: false,
-    });
-  };
-
-  const handleContinueGuest = () => {
-    onComplete({
-      name: 'Guest Explorer',
-      email: '',
-      isGuest: true,
-    });
-  };
+  const currentFrame = video.frames[frameIndex] || video.frames[0];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden">
-      {/* Ambient Background Glow */}
-      <div className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full bg-indigo-600/20 blur-[120px]" />
-
-      {/* Top Minimal Header */}
-      <header className="max-w-5xl w-full mx-auto flex items-center justify-between py-2 relative z-10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-xl tracking-tight">{brandName}</span>
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm bg-indigo-600 text-white break-words">
+          {video.prompt}
         </div>
-        <button
-          onClick={handleContinueGuest}
-          className="text-xs font-medium text-zinc-400 hover:text-white transition flex items-center gap-1"
-        >
-          Skip for now <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      </header>
-
-      {/* Center Auth Card */}
-      <main className="max-w-md w-full mx-auto my-auto py-6 relative z-10">
-        <div className="bg-zinc-900/90 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-          {/* App Logo & Tagline */}
-          <div className="text-center space-y-2.5">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-xl shadow-indigo-600/30 ring-1 ring-white/20">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight pt-1">Welcome to {brandName}</h1>
-            <p className="text-xs sm:text-sm text-zinc-400">
-              All-rounder AI for instant chat, live app building, image & logo design, PPTs, and vision analysis.
-            </p>
+      </div>
+      <div className="flex justify-start">
+        <div className="w-full max-w-xl rounded-2xl p-3 bg-zinc-900 border border-zinc-800 space-y-2.5 shadow-xl">
+          <div className="flex items-center justify-between text-xs text-indigo-300 font-medium px-1">
+            <span className="flex items-center gap-1.5">
+              <Video className="w-3.5 h-3.5 text-indigo-400" /> AI Motion Video • Scene {frameIndex + 1} of{' '}
+              {video.frames.length}
+            </span>
+            <span className="text-[11px] text-zinc-400">
+              {loadedCount < video.frames.length ? 'Rendering HD frames...' : '16:9 HD Ready'}
+            </span>
           </div>
 
-          {/* Email Sign-In / Sign-Up Form */}
-          <form onSubmit={handleEmailSubmit} className="space-y-3.5">
-            {isSignUp && (
-              <div className="relative">
-                <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your full name"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition"
-                />
-              </div>
-            )}
-
-            <div className="relative">
-              <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email address"
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition"
+          <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-zinc-950 border border-zinc-800">
+            {video.frames.map((frame, idx) => (
+              <img
+                key={idx}
+                src={frame.url}
+                alt={frame.caption}
+                onLoad={() => setLoadedCount((c) => Math.min(video.frames.length, c + 1))}
+                className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out ${
+                  idx === frameIndex ? 'opacity-100 scale-105' : 'opacity-0 scale-100 pointer-events-none'
+                }`}
               />
+            ))}
+
+            {/* Subtitle Overlay */}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-8">
+              <p className="text-xs sm:text-sm font-medium text-white drop-shadow">{currentFrame?.caption}</p>
             </div>
+          </div>
 
-            <div className="relative">
-              <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition"
-              />
-            </div>
-
-            {formError && <p className="text-xs text-red-400 text-center">{formError}</p>}
-
-            <button
-              type="submit"
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2"
-            >
-              <Mail className="w-4 h-4" />
-              {isSignUp ? 'Create Gliteco Account' : 'Sign In with Email'}
-            </button>
-          </form>
-
-          {/* Toggle Sign In / Sign Up */}
-          <div className="text-center">
+          {/* Timeline & Controls */}
+          <div className="flex items-center gap-2 pt-0.5">
             <button
               type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setFormError('');
-              }}
-              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+              onClick={() => setIsPlaying(!isPlaying)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
             >
-              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Create one free"}
+              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              {isPlaying ? 'Pause' : 'Play'}
             </button>
-          </div>
 
-          {/* Divider */}
-          <div className="relative flex items-center py-0.5">
-            <div className="flex-grow border-t border-zinc-800" />
-            <span className="shrink mx-3 text-[11px] uppercase tracking-wider text-zinc-500">or</span>
-            <div className="flex-grow border-t border-zinc-800" />
-          </div>
-
-          {/* Instant Continue Button */}
-          <button
-            type="button"
-            onClick={handleContinueGuest}
-            className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-100 font-semibold text-sm transition flex items-center justify-center gap-2"
-          >
-            Continue without Sign In <ArrowRight className="w-4 h-4 text-indigo-400" />
-          </button>
-
-          {/* Feature Highlights */}
-          <div className="pt-2 border-t border-zinc-800/80 grid grid-cols-3 gap-2 text-center text-[11px] text-zinc-400">
-            <div className="flex flex-col items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>100% Free AI</span>
+            <div className="flex-1 flex gap-1.5">
+              {video.frames.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setFrameIndex(idx)}
+                  className={`h-2 flex-1 rounded-full transition-all ${ idx === frameIndex ? 'bg-indigo-500' : 'bg-zinc-700 hover:bg-zinc-600' }`} title={`Scene ${idx + 1}`}
+                />
+              ))}
             </div>
-            <div className="flex flex-col items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>App & PPT Maker</span>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Multi-Language</span>
-            </div>
-          </div>
-        </div>
-      </main>
 
-      {/* Footer Credit */}
-      <footer className="text-center text-[11px] text-zinc-500 py-2 relative z-10">
-        {brandName} AI • Created by Pavan and Shalini for an advanced AI technology
-      </footer>
-    </div>
-  );
-}
-
-async function compressImageFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 1024;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
-      };
-      img.onerror = reject;
-      img.src = reader.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-async function extractVideoFrames(file: File): Promise<string[]> {
-  return new Promise((resolve) => {
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    video.muted = true;
-    video.playsInline = true;
-    const objectUrl = URL.createObjectURL(file);
-    video.src = objectUrl;
-
-    video.onloadedmetadata = async () => {
-      const duration = video.duration || 1;
-      const timestamps = [0.15 * duration, 0.5 * duration, 0.85 * duration];
-      const frames: string[] = [];
-
-      for (const time of timestamps) {
-        await new Promise<void>((res) => {
-          video.currentTime = Math.min(time, Math.max(duration - 0.1, 0));
-          video.onseeked = () => {
-            const canvas = document.createElement('canvas');
-            const scale = Math.min(720 / (video.videoWidth || 720), 1);
-            canvas.width = (video.videoWidth || 640) * scale;
-            canvas.height = (video.videoHeight || 360) * scale;
-            const ctx = canvas.getContext('2d');
-            ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-            frames.push(canvas.toDataURL('image/jpeg', 0.75));
-            res();
-          };
-        });
-      }
-
-      URL.revokeObjectURL(objectUrl);
-      resolve(frames);
-    };
-
-    video.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve([]);
-    };
-  });
-}
-
-async function extractDocumentText(file: File): Promise<string> {
-  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-    const pdfjsLib = await import('pdfjs-dist');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+            <a
+              href={currentFrame?.url}
+              download={`gliteco-scene-${frameIndex + 1}.jpg`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200" > <Download className="w-3.5 h-3.5" /> Frame </a> </div> </div> </div> </div> ); }  export default function Home() { const [mounted, setMounted] = useState(false); const [user, setUser] = useState<GlitecoUser \vert{} null>(null);  useEffect(() => { setMounted(true); try { const savedUser = localStorage.getItem('gliteco_user_profile_v1'); if (savedUser) { setUser(JSON.parse(savedUser)); } } catch {} }, []);  if (!mounted) { return <div className="h-screen bg-zinc-950" />; }  const handleAuthSuccess = (profile: GlitecoUser) => { setUser(profile); try { localStorage.setItem('gliteco_user_profile_v1', JSON.stringify(profile)); } catch {} };  const handleSignOut = () => { setUser(null); try { localStorage.removeItem('gliteco_user_profile_v1'); } catch {} };  if (!user) { return <GlitecoAuthScreen onComplete={handleAuthSuccess} />; }  return <GlitecoStudio user={user} onSignOut={handleSignOut} />; }  function GlitecoAuthScreen({ onComplete }: { onComplete: (u: GlitecoUser) => void }) { const brandName = process.env.NEXT_PUBLIC_APP_NAME \vert{}\vert{} 'Gliteco'; const [isSignUp, setIsSignUp] = useState(false); const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [formError, setFormError] = useState('');  const handleEmailSubmit = (e: React.FormEvent) => { e.preventDefault(); setFormError('');  const trimmedEmail = email.trim(); if (!trimmedEmail \vert{}\vert{} !trimmedEmail.includes('@')) { setFormError('Please enter a valid email address.'); return; } if (password.trim().length < 4) { setFormError('Please enter a password (at least 4 characters).'); return; }  const displayName = name.trim() \vert{}\vert{} trimmedEmail .split('@')[0] .replace(/[._-]/g, ' ') .replace(/\b\w/g, (l) => l.toUpperCase());  onComplete({ name: displayName, email: trimmedEmail, isGuest: false, }); };  const handleContinueGuest = () => { onComplete({ name: 'Guest Explorer', email: '', isGuest: true, }); };  return ( <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden"> <div className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full bg-indigo-600/20 blur-[120px]" />  <header className="max-w-5xl w-full mx-auto flex items-center justify-between py-2 relative z-10"> <div className="flex items-center gap-2.5"> <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/30"> <Sparkles className="w-5 h-5 text-white" /> </div> <span className="font-bold text-xl tracking-tight">{brandName}</span> </div> <button onClick={handleContinueGuest} className="text-xs font-medium text-zinc-400 hover:text-white transition flex items-center gap-1" > Skip for now <ArrowRight className="w-3.5 h-3.5" /> </button> </header>  <main className="max-w-md w-full mx-auto my-auto py-6 relative z-10"> <div className="bg-zinc-900/90 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6"> <div className="text-center space-y-2.5"> <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-xl shadow-indigo-600/30 ring-1 ring-white/20"> <Sparkles className="w-8 h-8 text-white" /> </div> <h1 className="text-2xl font-bold tracking-tight pt-1">Welcome to {brandName}</h1> <p className="text-xs sm:text-sm text-zinc-400"> All-rounder AI for instant chat, live app building, HD image & video creation, PPTs, and vision analysis. </p> </div>  <form onSubmit={handleEmailSubmit} className="space-y-3.5"> {isSignUp && ( <div className="relative"> <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div> )}  <div className="relative"> <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email address" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div>  <div className="relative"> <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div>  {formError && <p className="text-xs text-red-400 text-center">{formError}</p>}  <button type="submit" className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2" > <Mail className="w-4 h-4" /> {isSignUp ? 'Create Gliteco Account' : 'Sign In with Email'} </button> </form>  <div className="text-center"> <button type="button" onClick={() => { setIsSignUp(!isSignUp); setFormError(''); }} className="text-xs text-indigo-400 hover:text-indigo-300 font-medium" > {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Create one free"} </button> </div>  <div className="relative flex items-center py-0.5"> <div className="flex-grow border-t border-zinc-800" /> <span className="shrink mx-3 text-[11px] uppercase tracking-wider text-zinc-500">or</span> <div className="flex-grow border-t border-zinc-800" /> </div>  <button type="button" onClick={handleContinueGuest} className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-100 font-semibold text-sm transition flex items-center justify-center gap-2" > Continue without Sign In <ArrowRight className="w-4 h-4 text-indigo-400" /> </button>  <div className="pt-2 border-t border-zinc-800/80 grid grid-cols-3 gap-2 text-center text-[11px] text-zinc-400"> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>100\% Free AI</span> </div> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>Image & Video AI</span> </div> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>App & PPT Maker</span> </div> </div> </div> </main>  <footer className="text-center text-[11px] text-zinc-500 py-2 relative z-10"> {brandName}.ai • Created by Pavan and Shalini (CEO and CFO) of Gliteco </footer> </div> ); }  async function compressImageFile(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => { const img = new Image(); img.onload = () => { const maxDim = 1024; let { width, height } = img; if (width > maxDim \vert{}\vert{} height > maxDim) { if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; } else { width = Math.round((width * maxDim) / height); height = maxDim; } } const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx?.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.8)); }; img.onerror = reject; img.src = reader.result as string; }; reader.onerror = reject; reader.readAsDataURL(file); }); }  async function extractVideoFrames(file: File): Promise<string[]> { return new Promise((resolve) => { const video = document.createElement('video'); video.preload = 'metadata'; video.muted = true; video.playsInline = true; const objectUrl = URL.createObjectURL(file); video.src = objectUrl;  video.onloadedmetadata = async () => { const duration = video.duration \vert{}\vert{} 1; const timestamps = [0.15 * duration, 0.5 * duration, 0.85 * duration]; const frames: string[] = [];  for (const time of timestamps) { await new Promise<void>((res) => { video.currentTime = Math.min(time, Math.max(duration - 0.1, 0)); video.onseeked = () => { const canvas = document.createElement('canvas'); const scale = Math.min(720 / (video.videoWidth \vert{}\vert{} 720), 1); canvas.width = (video.videoWidth \vert{}\vert{} 640) * scale; canvas.height = (video.videoHeight \vert{}\vert{} 360) * scale; const ctx = canvas.getContext('2d'); ctx?.drawImage(video, 0, 0, canvas.width, canvas.height); frames.push(canvas.toDataURL('image/jpeg', 0.75)); res(); }; }); }  URL.revokeObjectURL(objectUrl); resolve(frames); };  video.onerror = () => { URL.revokeObjectURL(objectUrl); resolve([]); }; }); }  async function extractDocumentText(file: File): Promise<string> { if (file.type === 'application/pdf' \vert{}\vert{} file.name.toLowerCase().endsWith('.pdf')) { const pdfjsLib = await import('pdfjs-dist'); pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     let fullText = '';
@@ -405,13 +212,14 @@ async function extractDocumentText(file: File): Promise<string> {
 
 function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () => void }) {
   const brandName = process.env.NEXT_PUBLIC_APP_NAME || 'Gliteco';
-  const STORAGE_KEY = 'gliteco_chat_sessions_v1';
+  const STORAGE_KEY = 'gliteco_chat_sessions_v2';
 
-  const [mode, setMode] = useState<'general' | 'dev' | 'image' | 'search' | 'creator'>('general');
+  const [mode, setMode] = useState<'general' | 'dev' | 'image' | 'video' | 'search' | 'creator'>('general');
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const [generatedImages, setGeneratedImages] = useState<{ id: string; prompt: string; url: string }[]>([]);
+  const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideoItem[]>([]);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [activeAppHtml, setActiveAppHtml] = useState<string | null>(null);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
@@ -419,7 +227,6 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
   const [isProcessingFile, setIsProcessingFile] = useState(false);
 
   const lastAutoOpenedId = useRef<string | null>(null);
-  const lastSavedSnapshot = useRef<string>('');
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -441,7 +248,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, generatedImages, status, error]);
+  }, [messages, generatedImages, generatedVideos, status, error]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -459,8 +266,9 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
           setSessions(parsed);
           const latest = parsed[0];
           setCurrentSessionId(latest.id);
-          setMessages((latest.messages || []).filter((m: any) => Array.isArray(m?.parts) ? m.parts.some((p: any) => p?.type === "text" ? String(p.text || "").trim().length > 0 : Boolean(p?.url || p?.data)) : Boolean(m?.content)));
+          setMessages(latest.messages || []);
           setGeneratedImages(latest.images || []);
+          setGeneratedVideos(latest.videos || []);
         }
       }
     } catch {}
@@ -468,13 +276,22 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
   useEffect(() => {
     if (status !== 'ready') return;
-    if (messages.length === 0 && generatedImages.length === 0) return;
+    if (messages.length === 0 && generatedImages.length === 0 && generatedVideos.length === 0) return;
+
     const firstUserMsg = messages.find((m) => m.role === 'user');
-    const firstText = firstUserMsg ? firstUserMsg.parts.filter((p) => p.type === 'text').filter(Boolean).map((p) => p.text).join('') : generatedImages[0]?.prompt || 'New Conversation';
+    const firstText = firstUserMsg
+      ? firstUserMsg.parts
+          .filter((p: any) => p.type === 'text')
+          .map((p: any) => p.text)
+          .join('')
+      : generatedImages[0]?.prompt || generatedVideos[0]?.prompt || 'New Conversation';
+
     const title = firstText.slice(0, 42) + (firstText.length > 42 ? '...' : '');
+
+    // Strip heavy base64 image uploads before saving to localStorage while keeping all text
     const lightweightMessages = messages.map((m) => ({
       ...m,
-      parts: m.parts.map(()=>({type:'text',text:''})),
+      parts: m.parts.filter((p: any) => p.type === 'text'),
     }));
 
     setSessions((prev) => {
@@ -484,6 +301,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
         updatedAt: Date.now(),
         messages: lightweightMessages,
         images: generatedImages,
+        videos: generatedVideos,
       };
       const others = prev.filter((s) => s.id !== currentSessionId);
       const next = [updatedSession, ...others].slice(0, 30);
@@ -492,7 +310,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
       } catch {}
       return next;
     });
-  }, [status, messages, generatedImages, currentSessionId]);
+  }, [status, messages, generatedImages, generatedVideos, currentSessionId]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -577,26 +395,20 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
   const startNewChat = () => {
     stopSpeaking();
     const newId = String(Date.now());
-    lastSavedSnapshot.current = '';
     setCurrentSessionId(newId);
     setMessages([]);
     setGeneratedImages([]);
+    setGeneratedVideos([]);
     setAttachments([]);
     setShowHistory(false);
   };
 
   const loadSession = (session: SavedSession) => {
     stopSpeaking();
-    lastSavedSnapshot.current = JSON.stringify({
-      id: session.id,
-      msgCount: (session.messages || []).length,
-      lastMsgId: session.messages?.[session.messages.length - 1]?.id,
-      imgCount: (session.images || []).length,
-      lastImgId: session.images?.[session.images.length - 1]?.id,
-    });
     setCurrentSessionId(session.id);
-    setMessages((session.messages || []).filter((m: any) => Array.isArray(m?.parts) ? m.parts.some((p: any) => p?.type === "text" ? String(p.text || "").trim().length > 0 : Boolean(p?.url || p?.data)) : Boolean(m?.content)));
+    setMessages(session.messages || []);
     setGeneratedImages(session.images || []);
+    setGeneratedVideos(session.videos || []);
     setAttachments([]);
     setShowHistory(false);
   };
@@ -645,28 +457,62 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
     stopSpeaking();
 
+    // 1. Single-Prompt AI Video Generator (4-Scene Cinematic HD Motion Video)
+    const isVideoGenRequest =
+      attachments.length === 0 &&
+      (mode === 'video' ||
+        /\b(generate|create|make|render|produce)\b.*\b(video|animation|animated|reel|movie|clip|commercial|ad video)\b/i.test(
+          trimmed
+        ));
+
+    if (isVideoGenRequest) {
+      const cleanTopic =
+        trimmed
+          .replace(/\b(can you|please|generate|create|make|render|produce)\b/gi, '')
+          .replace(/\b(an?|the)?\s*(short|hd|4k|ai|animated)?\s*(video|animation|reel|movie|clip|commercial)\s*(of|about|for|showing)?\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim() || trimmed;
+
+      const scenes = [
+        {
+          url: buildImageUrl(`${cleanTopic}, wide establishing cinematic shot, golden hour lighting`, 1280, 720, 11),
+          caption: `Scene 1 • Establishing view: ${cleanTopic}`,
+        },
+        {
+          url: buildImageUrl(`${cleanTopic}, dynamic close-up action shot, dramatic depth of field`, 1280, 720, 22),
+          caption: `Scene 2 • Close-up perspective: ${cleanTopic}`,
+        },
+        {
+          url: buildImageUrl(`${cleanTopic}, futuristic aerial drone view, vibrant atmosphere`, 1280, 720, 33),
+          caption: `Scene 3 • Aerial cinematic angle: ${cleanTopic}`,
+        },
+        {
+          url: buildImageUrl(`${cleanTopic}, epic grand finale shot, ultra detailed 8k`, 1280, 720, 44),
+          caption: `Scene 4 • Finale: ${cleanTopic}`,
+        },
+      ];
+
+      setGeneratedVideos((prev) => [...prev, { id: String(Date.now()), prompt: trimmed, frames: scenes }]);
+      setInput('');
+      return;
+    }
+
+    // 2. Single-Prompt HD Image & Logo Generator (Triggers for ANY image/logo/photo prompt)
     const isImageGenRequest =
       attachments.length === 0 &&
       (mode === 'image' ||
-        /^(generate|create|draw|make|design)\s+(an?\s+)?(image|picture|photo|logo|poster|banner|illustration)\b/i.test(
+        /\b(generate|create|draw|make|design|render|paint|show me)\b.*\b(image|picture|photo|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait)\b/i.test(
           trimmed
         ));
 
     if (isImageGenRequest) {
-      const cleanPrompt =
-        trimmed.replace(
-          /^(generate|create|draw|make|design)\s+(an?\s+)?(image|picture|photo|logo|poster|banner|illustration)\s*(of|for)?\s*/i,
-          ''
-        ) || trimmed;
-      const seed = Math.floor(Math.random() * 100000);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(
-        cleanPrompt
-      )}?width=1024&height=1024&seed=${seed}&nologo=true`;
+      const url = buildImageUrl(trimmed, 1024, 1024, 0);
       setGeneratedImages((prev) => [...prev, { id: String(Date.now()), prompt: trimmed, url }]);
       setInput('');
       return;
     }
 
+    // 3. Attachments + Standard / App Builder Chat
     const docSections = attachments
       .filter((a) => a.kind === 'document' && a.extractedText)
       .map((a) => `\n\n[Uploaded File: ${a.name}]\n${a.extractedText}`)
@@ -725,15 +571,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
   const retryImage = (id: string, prompt: string) => {
     setFailedImages((prev) => ({ ...prev, [id]: false }));
-    const cleanPrompt =
-      prompt.replace(
-        /^(generate|create|draw|make|design)\s+(an?\s+)?(image|picture|photo|logo|poster|banner|illustration)\s*(of|for)?\s*/i,
-        ''
-      ) || prompt;
-    const seed = Math.floor(Math.random() * 100000);
-    const newUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
-      cleanPrompt
-    )}?width=1024&height=1024&seed=${seed}&nologo=true`;
+    const newUrl = buildImageUrl(prompt, 1024, 1024, Math.floor(Math.random() * 500));
     setGeneratedImages((prev) => prev.map((img) => (img.id === id ? { ...img, url: newUrl } : img)));
   };
 
@@ -829,7 +667,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     if (navigator.share) {
       await navigator.share({
         title: brandName,
-        text: `Try ${brandName} — Free AI Chat, Vision & File Analysis, App Builder, Image Studio, PPT & PDF Maker!`,
+        text: `Try ${brandName} — Free AI Chat, HD Image & Video Studio, App Builder, PPT & PDF Maker!`,
         url: window.location.href,
       });
     } else {
@@ -887,7 +725,6 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
             ))}
           </div>
 
-          {/* User Account Footer inside Sidebar */}
           <div className="p-3 border-t border-zinc-800 bg-zinc-950/60 flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-zinc-200 truncate">{user.name}</p>
@@ -906,7 +743,6 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
       {/* Main Column */}
       <div className="flex-1 flex flex-col h-screen min-w-0">
-        {/* Clean Header */}
         <header className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur">
           <div className="flex items-center gap-2">
             <button
@@ -952,8 +788,9 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
         <div className="flex gap-2 px-4 py-2.5 overflow-x-auto border-b border-zinc-800/60 bg-zinc-900/40 shrink-0">
           {[
             { id: 'general', label: 'AI Chat', icon: MessageSquare },
+            { id: 'image', label: 'HD Image Studio', icon: ImageIcon },
+            { id: 'video', label: 'AI Video Studio', icon: Video },
             { id: 'dev', label: 'App & Web Designer', icon: Layers },
-            { id: 'image', label: 'Image & Logo Studio', icon: ImageIcon },
             { id: 'creator', label: 'PPT & PDF Maker', icon: PenTool },
             { id: 'search', label: 'Live Web Search', icon: Globe },
           ].map((item) => {
@@ -972,10 +809,9 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
           })}
         </div>
 
-        {/* Top Ad Monetization Slot */}
         {/* Main Visual & Chat Canvas */}
         <main className="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl w-full mx-auto">
-          {messages.length === 0 && generatedImages.length === 0 && (
+          {messages.length === 0 && generatedImages.length === 0 && generatedVideos.length === 0 && (
             <div className="text-center py-12 space-y-4">
               <h1 className="text-2xl sm:text-3xl font-bold">
                 {user.isGuest
@@ -983,12 +819,13 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
                   : `Welcome back, ${user.name}!`}
               </h1>
               <p className="text-zinc-400 text-sm max-w-md mx-auto">
-                Upload photos, videos, PDFs, or documents—or design live apps, websites, logos, PPT slides, and PDFs
-                in seconds.
+                Generate photorealistic HD images, cinematic motion videos, full interactive apps, PPT slides, and PDFs
+                from a single easy prompt.
               </p>
               <div className="flex flex-wrap justify-center gap-2 pt-2">
                 {[
-                  'Explain quantum computing simply with real-world examples',
+                  'Create an image of a futuristic glass Microsoft campus at golden sunset',
+                  'Create a video of a sleek electric sports car driving through Tokyo at night',
                   'Design a complete food delivery app with menu, cart & checkout',
                   'Create a 6-slide presentation on the future of artificial intelligence',
                 ].map((sample) => (
@@ -1047,7 +884,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
                   ) : (
                     <div className="space-y-2.5">
                       {cleanText ? (
-                        <ReactMarkdown components={markdownComponents} remarkPlugins={markdownPlugins}>
+                        <ReactMarkdown components="{markdownComponents}" remarkPlugins="{markdownPlugins}">
                           {cleanText}
                         </ReactMarkdown>
                       ) : (
@@ -1089,7 +926,16 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
                           onClick={() => downloadStandaloneApp(htmlCode)}
                           className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
                         >
-                          <Download className="w-3.5 h-3.5"/> Save App to Device</button><a href="https://www.hostinger.in" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-medium">Host This Website Online</a>
+                          <Download className="w-3.5 h-3.5"/> Save App to Device
+                        </button>
+                        <a
+                          href="[https://www.hostinger.in](https://www.hostinger.in)"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-medium"
+                        >
+                          Host This Website Online
+                        </a>
                       </div>
                     </div>
                   )}
@@ -1160,15 +1006,23 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
                         onError={() => setFailedImages((prev) => ({ ...prev, [img.id]: true }))}
                         className="rounded-xl w-full max-w-md object-cover bg-zinc-800"
                       />
-                      <a
-                        href={img.url}
-                        download={`${brandName.toLowerCase()}-design.jpg`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
-                      >
-                        <Download className="w-3.5 h-3.5"/> Save Image / Logo
-                      </a>
+                      <div className="flex items-center justify-between pt-1">
+                        <a
+                          href={img.url}
+                          download={`${brandName.toLowerCase()}-design.jpg`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
+                        >
+                          <Download className="w-3.5 h-3.5"/> Save HD Image / Logo
+                        </a>
+                        <button
+                          onClick={() => retryImage(img.id, img.prompt)}
+                          className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+                        >
+                          <RotateCcw className="w-3 h-3"/> Regenerate
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>
@@ -1176,7 +1030,10 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
             </div>
           ))}
 
-          {/* Clear Error & Retry Banner */}
+          {generatedVideos.map((vid) => (
+            <CinematicVideoCard key="{vid.id}" video="{vid}"/>
+          ))}
+
           {error && (
             <div className="p-3.5 rounded-xl bg-red-950/50 border border-red-500/40 flex items-center justify-between gap-3 text-xs text-red-200">
               <div className="flex items-center gap-2 min-w-0">
@@ -1263,7 +1120,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
           </div>
         )}
 
-        {/* Input Bar with Image, Video & File Upload */}
+        {/* Input Bar */}
         <footer className="p-3 border-t border-zinc-800 bg-zinc-950 shrink-0">
           {attachments.length > 0 && (
             <div className="max-w-3xl mx-auto flex flex-wrap gap-2 mb-2.5">
@@ -1308,7 +1165,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
               title="Upload Image, Video, PDF, or File"
               className="p-3 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:border-indigo-500 shrink-0"
             >
-              <Paperclip className={paperclipClass}/>
+              <Paperclip className="{paperclipClass}"/>
             </button>
             <button
               type="button"
@@ -1326,7 +1183,13 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Gliteco anything..."
+              placeholder={
+                mode === 'image'
+                  ? 'Describe any HD image, logo, or poster...'
+                  : mode === 'video'
+                    ? 'Describe any video scene to animate...'
+                    : 'Ask Gliteco anything...'
+              }
               className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 resize-none max-h-40 overflow-y-auto leading-relaxed"
             />
             <button
@@ -1338,7 +1201,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
             </button>
           </form>
           <p className="text-center text-[10px] text-zinc-500 mt-2">
-            By using {brandName}, you agree to our Terms of Use. Supports Images, Videos, PDFs & Documents 100% Free.
+            By using {brandName}, you agree to our Terms of Use. Supports HD Images, Videos, Apps, PDFs & Documents 100% Free.
           </p>
         </footer>
       </div>
