@@ -15,7 +15,7 @@ async function describeSubjectFromImage(imageDataUrl: string): Promise<string> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      model: 'qwen/qwen3.8-27b',
       temperature: 0.2,
       max_tokens: 180,
       messages: [
