@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         model,
         messages: [systemPrompt, ...sanitizedMessages],
         temperature: 0.3,
-      reasoning_effort: 'none',
+      reasoning_effort: 'low',
         max_tokens: 2048,
       }),
     });

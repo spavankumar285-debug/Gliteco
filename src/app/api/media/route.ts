@@ -17,7 +17,7 @@ async function describeSubjectFromImage(imageDataUrl: string): Promise<string> {
     body: JSON.stringify({
       model: 'qwen/qwen3.8-27b',
       temperature: 0.3,
-      reasoning_effort: 'none',
+      reasoning_effort: 'low',
       max_tokens: 180,
       messages: [
         {

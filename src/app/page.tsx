@@ -501,7 +501,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
       mode !== 'dev' &&
       mode !== 'creator' &&
       mode !== 'search' &&
-      (mode === 'image' ||
+      (mode === 'image' || (refImg && /change|background|edit|replace|make|turn|put|place|palace|image|photo/i.test(trimmed)) ||
         /\b(generate|create|draw|make|design|render|paint|transform|change|edit|replace|set|update|put|place|dress|show|give|send|want|need)\b.*\b(image|images|pic|pics|picture|pictures|photo|photos|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait|photorealistic|8k|background|scene)\b/i.test(
           trimmed
         ));
