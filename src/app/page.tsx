@@ -463,7 +463,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     const isVideoGenRequest =
       attachments.length === 0 &&
       (mode === 'video' ||
-        /\b(generate|create|make|render|produce)\b.*\b(video|animation|animated|reel|movie|clip|commercial|ad video)\b/i.test(
+        /\b(generate|create|make|render|produce|show|give|send|want|need)\b.*\b(video|videos|animation|animated|reel|movie|clip|commercial)\b/i.test(
           trimmed
         ));
 
@@ -505,7 +505,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     const isImageGenRequest =
       attachments.length === 0 &&
       (mode === 'image' ||
-        /\b(generate|create|draw|make|design|render|paint|show me)\b.*\b(image|picture|photo|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait)\b/i.test(
+        /\b(generate|create|draw|make|design|render|paint|show|give|send|want|need)\b.*\b(image|images|pic|pics|picture|pictures|photo|photos|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait)\b/i.test(
           trimmed
         ));
 

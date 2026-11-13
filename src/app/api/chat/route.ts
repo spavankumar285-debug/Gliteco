@@ -139,7 +139,7 @@ export async function POST(req: Request) {
     const isDirectVideoQuery =
       !hasImages &&
       (mode === 'video' ||
-        /\b(generate|create|make|render|produce)\b.*\b(video|animation|animated|reel|movie|clip|commercial)\b/i.test(
+        /\b(generate|create|make|render|produce|show|give|send|want|need)\b.*\b(video|videos|animation|animated|reel|movie|clip|commercial)\b/i.test(
           lastUserText
         ));
 
@@ -147,7 +147,7 @@ export async function POST(req: Request) {
       !hasImages &&
       !isDirectVideoQuery &&
       (mode === 'image' ||
-        /\b(generate|create|draw|make|design|render|paint|show me)\b.*\b(image|picture|photo|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait)\b/i.test(
+        /\b(generate|create|draw|make|design|render|paint|show|give|send|want|need)\b.*\b(image|images|pic|pics|picture|pictures|photo|photos|photograph|logo|poster|banner|illustration|wallpaper|avatar|portrait)\b/i.test(
           lastUserText
         ));
 
