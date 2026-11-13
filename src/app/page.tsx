@@ -474,7 +474,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     const title = firstText.slice(0, 42) + (firstText.length > 42 ? '...' : '');
     const lightweightMessages = messages.map((m) => ({
       ...m,
-      parts: m.parts.map(()=>({type:'text',text:'[Attached Media]'})),
+      parts: m.parts.map(()=>({type:'text',text:''})),
     }));
 
     setSessions((prev) => {
