@@ -21,7 +21,7 @@ async function describeSubjectFromPhoto(referenceImage: string): Promise<string>
             content: [
               {
                 type: 'text',
-                text: 'Describe ONLY the person in this photo in 1 concise visual sentence (gender, approximate age, ethnicity/skin tone, exact hairstyle, facial features, expression) so an image generator can recreate the exact same person. No intro text.',
+                text: 'Describe ONLY the hairstyle, glasses/accessories, and general age group (e.g. young woman or young man) in 10 safe, family-friendly words. Do not mention body parts, skin, or clothing.',
               },
               {
                 type: 'image_url',
@@ -32,29 +32,20 @@ async function describeSubjectFromPhoto(referenceImage: string): Promise<string>
         ],
         temperature: 0.2,
         reasoning_effort: 'low',
-        max_tokens: 220,
+        max_tokens: 120,
       }),
     });
 
     if (!res.ok) return '';
     const data = await res.json();
-    return (data?.choices?.[0]?.message?.content || '').trim();
+    return (data?.choices?.[0]?.message?.content || '').replace(/["\n]/g, ' ').trim();
   } catch {
     return '';
   }
 }
 
-async function generateCloudflareImage(
-  accountId: string,
-  apiToken: string,
-  prompt: string,
-  subjectDescription = ''
-): Promise<string> {
-  const finalPrompt = subjectDescription
-    ? `Photorealistic portrait of ${subjectDescription}, ${prompt}, ultra detailed, cinematic lighting, sharp focus, 8k resolution`
-    : `${prompt}, ultra detailed, photorealistic, cinematic lighting, 8k resolution`;
-
-  const fluxRes = await fetch(
+async function runFlux(accountId: string, apiToken: string, prompt: string) {
+  return fetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
     {
       method: 'POST',
@@ -63,11 +54,39 @@ async function generateCloudflareImage(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt: finalPrompt,
+        prompt,
         steps: 6,
       }),
     }
   );
+}
+
+async function generateCloudflareImage(
+  accountId: string,
+  apiToken: string,
+  prompt: string,
+  subjectDescription = ''
+): Promise<string> {
+  const safeUserPrompt = prompt.trim() || 'royal portrait in front of a grand palace';
+  const primaryPrompt = subjectDescription
+    ? `Family-friendly photorealistic portrait of ${subjectDescription}, fully dressed in elegant modest attire, ${safeUserPrompt}, cinematic lighting, 8k`
+    : `Family-friendly photorealistic portrait, fully dressed in elegant modest attire, ${safeUserPrompt}, cinematic lighting, 8k`;
+
+  let fluxRes = await runFlux(accountId, apiToken, primaryPrompt);
+
+  // If Cloudflare's strict filter flags any word (code 8007), automatically retry with a clean fallback prompt
+  if (!fluxRes.ok) {
+    const errText = await fluxRes.text();
+    if (errText.includes('8007') || errText.toLowerCase().includes('nsfw')) {
+      fluxRes = await runFlux(
+        accountId,
+        apiToken,
+        `Safe, family-friendly editorial portrait of ${safeUserPrompt}, fully clothed, high quality photography, 8k`
+      );
+    } else {
+      throw new Error(`Cloudflare AI error (${fluxRes.status}): ${errText.slice(0, 200)}`);
+    }
+  }
 
   if (!fluxRes.ok) {
     const errText = await fluxRes.text();
