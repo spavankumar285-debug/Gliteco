@@ -461,7 +461,26 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
     stopSpeaking();
 
-    const extractImg = (list: any[]) => (list || []).flatMap((a: any) => Object.values(a || {})).find((v: any) => typeof v === 'string' && v.startsWith('data:image/')) as string | undefined; const refImg = extractImg(attachments) || extractImg([...messages].reverse().flatMap((m: any) => m.attachments || []));
+    const extractImg = (list: any[]) => (list || []).flatMap((a: any) => Object.values(a || {})).find((v: any) => typeof v === 'string' && v.startsWith('data:image/')) as string | undefined; const compressDataUrl = (dataUrl?: string): Promise<string | undefined> =>
+      new Promise((resolve) => {
+        if (!dataUrl) return resolve(undefined);
+        const img = new Image();
+        img.onload = () => {
+          const max = 512;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(dataUrl);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      });
+    const rawRefImg = extractImg(attachments) || extractImg([...messages].reverse().flatMap((m: any) => m.attachments || []));
+    const refImg = await compressDataUrl(rawRefImg);
 
     const isVideoGenRequest =
       mode === 'video' ||
