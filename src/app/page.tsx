@@ -228,6 +228,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
   const [activeAppHtml, setActiveAppHtml] = useState<string | null>(null);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [lastUploadedImage, setLastUploadedImage] = useState<string | undefined>(undefined);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [isGeneratingMedia, setIsGeneratingMedia] = useState(false);
 
@@ -487,8 +488,16 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
       });
 
     const rawRefImg =
-      extractImg(attachments) || extractImg([...messages].reverse().flatMap((m: any) => m.parts || []));
+      extractImg(attachments) ||
+      extractImg([...messages].reverse().flatMap((m: any) => m.parts || [])) ||
+      lastUploadedImage;
     const refImg = await compressDataUrl(rawRefImg);
+    const hasFreshAttachment = attachments.some((a) => a.kind === 'image');
+    const isConversationalQuestion =
+      !hasFreshAttachment &&
+      mode === 'general' &&
+      (/^\s*(why|what|how|when|where|who|is|are|can|could|would|will|do|does|did|i said|tell me about|explain)\b/i.test(trimmed) ||
+        trimmed.endsWith('?'));
 
     const isVideoGenRequest =
       mode === 'video' ||
