@@ -232,6 +232,7 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
   const [isGeneratingMedia, setIsGeneratingMedia] = useState(false);
 
   const lastAutoOpenedId = useRef<string | null>(null);
+  const msgTimesRef = useRef<Record<string, number>>({});
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -889,198 +890,219 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
             </div>
           )}
 
-          {messages.map((m) => {
-            const textContent = m.parts
-              .filter((part) => part.type === 'text')
-              .map((part) => part.text)
-              .join('');
-            const imageParts = m.parts.filter(
-              (part: any) => part.type === 'file' && part.mediaType?.startsWith('image/')
-            );
-            const htmlCode = m.role === 'assistant' ? extractHtmlBlock(textContent) : null;
-            const cleanText = textContent.replace(/```html[\s\S]*?(```|$)/gi, '').trim();
-            const isDesigningApp = m.role === 'assistant' && isLoading && /```html/i.test(textContent) && !htmlCode;
-            const isSpeakingThis = speakingMsgId === m.id;
+          {(() => {
+            messages.forEach((m, idx) => {
+              if (!msgTimesRef.current[m.id]) {
+                msgTimesRef.current[m.id] = Date.now() + idx;
+              }
+            });
 
-            const displayUserText =
-              m.role === 'user' ? textContent.split('\n\n[Uploaded File:')[0] : textContent;
+            type FeedEntry =
+              | { kind: 'msg'; time: number; data: any }
+              | { kind: 'img'; time: number; data: { id: string; prompt: string; url: string } }
+              | { kind: 'vid'; time: number; data: GeneratedVideoItem };
 
-            return (
-              <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words ${
-                    m.role === 'user'
-                      ? 'bg-indigo-600 text-white whitespace-pre-wrap'
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-100'
-                  }`}
-                >
-                  {imageParts.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {imageParts.map((imgPart: any, i: number) => (
-                        <img
-                          key={i}
-                          src={imgPart.url}
-                          alt="Uploaded"
-                          className="w-24 h-24 object-cover rounded-lg border border-white/20"
-                        />
-                      ))}
-                    </div>
-                  )}
+            const feed: FeedEntry[] = [
+              ...messages.map((m) => ({ kind: 'msg' as const, time: msgTimesRef.current[m.id] || 0, data: m })),
+              ...generatedImages.map((img) => ({ kind: 'img' as const, time: Number(img.id) || 0, data: img })),
+              ...generatedVideos.map((vid) => ({ kind: 'vid' as const, time: Number(vid.id) || 0, data: vid })),
+            ].sort((a, b) => a.time - b.time);
 
-                  {m.role === 'user' ? (
-                    displayUserText
-                  ) : (
-                    <div className="space-y-2.5">
-                      {cleanText ? (
-                        <ReactMarkdown components={markdownComponents} remarkPlugins={markdownPlugins}>
-                          {cleanText}
-                        </ReactMarkdown>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-indigo-300 text-xs font-medium py-1">
-                          <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" />
-                          <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce [animation-delay:150ms]" />
-                          <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce [animation-delay:300ms]" />
-                          <span className="ml-1">Gliteco is thinking...</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {isDesigningApp && (
-                    <div className="mt-3 p-3.5 rounded-xl bg-indigo-950/50 border border-indigo-500/30 flex items-center gap-3 text-xs text-indigo-300">
-                      <Wand2 className="w-4 h-4 text-indigo-400 animate-spin"/>
-                      Designing layout, colors, buttons & interactive features... Opening your live app automatically!
-                    </div>
-                  )}
-
-                  {htmlCode && (
-                    <div className="mt-3 p-4 rounded-xl bg-gradient-to-br from-zinc-950 to-indigo-950/30 border border-emerald-500/40 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-bold text-emerald-400">Your App & Webpage is Live!</p>
-                          <p className="text-xs text-zinc-400">
-                            Fully interactive—click below to use it in Web or Mobile view.
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => setActiveAppHtml(htmlCode)}
-                          className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20"
-                        >
-                          <Play className="w-4 h-4"/> Open Finished App
-                        </button>
-                      </div>
-                      <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-4">
-                        <button
-                          onClick={() => downloadStandaloneApp(htmlCode)}
-                          className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
-                        >
-                          <Download className="w-3.5 h-3.5"/> Save App to Device
-                        </button>
-                        <a
-                          href="[https://www.hostinger.in](https://www.hostinger.in)"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-medium"
-                        >
-                          Host This Website Online
-                        </a>
+            return feed.map((entry) => {
+              if (entry.kind === 'img') {
+                const img = entry.data;
+                return (
+                  <div key={`img-${img.id}`} className="space-y-2">
+                    <div className="flex justify-end">
+                      <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm bg-indigo-600 text-white break-words">
+                        {img.prompt}
                       </div>
                     </div>
-                  )}
-
-                  {m.role === 'assistant' && textContent && !htmlCode && !isDesigningApp && (
-                    <div className="mt-3 pt-2 border-t border-zinc-800/80 flex flex-wrap items-center gap-3">
-                      <button
-                        onClick={() => toggleSpeakText(m.id, textContent)}
-                        className={`flex items-center gap-1 text-[11px] font-medium transition ${
-                          isSpeakingThis
-                            ? 'text-red-400 hover:text-red-300'
-                            : 'text-zinc-400 hover:text-indigo-400'
-                        }`}
-                      >
-                        {isSpeakingThis ? (
-                          <>
-                            <Square className="w-3.5 h-3.5 fill-current"/> Stop Speaking
-                          </>
+                    <div className="flex justify-start">
+                      <div className="max-w-[85%] rounded-2xl p-3 bg-zinc-900 border border-zinc-800 space-y-2">
+                        {failedImages[img.id] ? (
+                          <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 space-y-2">
+                            <p>Image server took too long to respond.</p>
+                            <button
+                              onClick={() => retryImage(img.id, img.prompt)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" /> Retry Image
+                            </button>
+                          </div>
                         ) : (
                           <>
-                            <Volume2 className="w-3.5 h-3.5"/> Listen
+                            <img
+                              src={img.url}
+                              alt={img.prompt}
+                              onError={() => setFailedImages((prev) => ({ ...prev, [img.id]: true }))}
+                              className="rounded-xl w-full max-w-md object-cover bg-zinc-800"
+                            />
+                            <div className="flex items-center justify-between pt-1">
+                              <a
+                                href={img.url}
+                                download={`${brandName.toLowerCase()}-design.jpg`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
+                              >
+                                <Download className="w-3.5 h-3.5" /> Save HD Image / Logo
+                              </a>
+                              <button
+                                onClick={() => retryImage(img.id, img.prompt)}
+                                className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+                              >
+                                <RotateCcw className="w-3 h-3" /> Regenerate
+                              </button>
+                            </div>
                           </>
                         )}
-                      </button>
-                      <button
-                        onClick={() => downloadPDF(textContent)}
-                        className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-emerald-400"
-                      >
-                        <FileText className="w-3.5 h-3.5"/> Download PDF
-                      </button>
-                      <button
-                        onClick={() => downloadPPT(textContent)}
-                        className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-amber-400"
-                      >
-                        <Presentation className="w-3.5 h-3.5"/> Download PPT
-                      </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                  </div>
+                );
+              }
 
-          {generatedImages.map((img) => (
-            <div key={img.id} className="space-y-2">
-              <div className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm bg-indigo-600 text-white break-words">
-                  {img.prompt}
-                </div>
-              </div>
-              <div className="flex justify-start">
-                <div className="max-w-[85%] rounded-2xl p-3 bg-zinc-900 border border-zinc-800 space-y-2">
-                  {failedImages[img.id] ? (
-                    <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 space-y-2">
-                      <p>Image server took too long to respond.</p>
-                      <button
-                        onClick={() => retryImage(img.id, img.prompt)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5"/> Retry Image
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <img
-                        src={img.url}
-                        alt={img.prompt}
-                        onError={() => setFailedImages((prev) => ({ ...prev, [img.id]: true }))}
-                        className="rounded-xl w-full max-w-md object-cover bg-zinc-800"
-                      />
-                      <div className="flex items-center justify-between pt-1">
-                        <a
-                          href={img.url}
-                          download={`${brandName.toLowerCase()}-design.jpg`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
-                        >
-                          <Download className="w-3.5 h-3.5"/> Save HD Image / Logo
-                        </a>
+              if (entry.kind === 'vid') {
+                return <CinematicVideoCard key={`vid-${entry.data.id}`} video={entry.data} />;
+              }
+
+              const m = entry.data;
+              const textContent = m.parts
+                .filter((part: any) => part.type === 'text')
+                .map((part: any) => part.text)
+                .join('');
+              const imageParts = m.parts.filter(
+                (part: any) => part.type === 'file' && part.mediaType?.startsWith('image/')
+              );
+              const htmlCode = m.role === 'assistant' ? extractHtmlBlock(textContent) : null;
+              const cleanText = textContent.replace(/```html[\s\S]*?(```|$)/gi, '').trim();
+              const isDesigningApp = m.role === 'assistant' && isLoading && /```html/i.test(textContent) && !htmlCode;
+              const isSpeakingThis = speakingMsgId === m.id;
+              const displayUserText = m.role === 'user' ? textContent.split('\n\n[Uploaded File:')[0] : textContent;
+
+              return (
+                <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words ${
+                      m.role === 'user'
+                        ? 'bg-indigo-600 text-white whitespace-pre-wrap'
+                        : 'bg-zinc-900 border border-zinc-800 text-zinc-100'
+                    }`}
+                  >
+                    {imageParts.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {imageParts.map((imgPart: any, i: number) => (
+                          <img
+                            key={i}
+                            src={imgPart.url}
+                            alt="Uploaded"
+                            className="w-24 h-24 object-cover rounded-lg border border-white/20"
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {m.role === 'user' ? (
+                      displayUserText
+                    ) : (
+                      <div className="space-y-2.5">
+                        {cleanText ? (
+                          <ReactMarkdown components={markdownComponents} remarkPlugins={markdownPlugins}>
+                            {cleanText}
+                          </ReactMarkdown>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-indigo-300 text-xs font-medium py-1">
+                            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" />
+                            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce [animation-delay:150ms]" />
+                            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce [animation-delay:300ms]" />
+                            <span className="ml-1">Gliteco is thinking...</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {isDesigningApp && (
+                      <div className="mt-3 p-3.5 rounded-xl bg-indigo-950/50 border border-indigo-500/30 flex items-center gap-3 text-xs text-indigo-300">
+                        <Wand2 className="w-4 h-4 text-indigo-400 animate-spin" />
+                        Designing layout, colors, buttons & interactive features... Opening your live app automatically!
+                      </div>
+                    )}
+
+                    {htmlCode && (
+                      <div className="mt-3 p-4 rounded-xl bg-gradient-to-br from-zinc-950 to-indigo-950/30 border border-emerald-500/40 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-emerald-400">Your App & Webpage is Live!</p>
+                            <p className="text-xs text-zinc-400">
+                              Fully interactive—click below to use it in Web or Mobile view.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setActiveAppHtml(htmlCode)}
+                            className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20"
+                          >
+                            <Play className="w-4 h-4" /> Open Finished App
+                          </button>
+                        </div>
+                        <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-4">
+                          <button
+                            onClick={() => downloadStandaloneApp(htmlCode)}
+                            className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Save App to Device
+                          </button>
+                          <a
+                            href="https://www.hostinger.in"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-medium"
+                          >
+                            Host This Website Online
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    {m.role === 'assistant' && textContent && !htmlCode && !isDesigningApp && (
+                      <div className="mt-3 pt-2 border-t border-zinc-800/80 flex flex-wrap items-center gap-3">
                         <button
-                          onClick={() => retryImage(img.id, img.prompt)}
-                          className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+                          onClick={() => toggleSpeakText(m.id, textContent)}
+                          className={`flex items-center gap-1 text-[11px] font-medium transition ${
+                            isSpeakingThis
+                              ? 'text-red-400 hover:text-red-300'
+                              : 'text-zinc-400 hover:text-indigo-400'
+                          }`}
                         >
-                          <RotateCcw className="w-3 h-3"/> Regenerate
+                          {isSpeakingThis ? (
+                            <>
+                              <Square className="w-3.5 h-3.5 fill-current" /> Stop Speaking
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 className="w-3.5 h-3.5" /> Listen
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => downloadPDF(textContent)}
+                          className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-emerald-400"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> Download PDF
+                        </button>
+                        <button
+                          onClick={() => downloadPPT(textContent)}
+                          className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-amber-400"
+                        >
+                          <Presentation className="w-3.5 h-3.5" /> Download PPT
                         </button>
                       </div>
-                    </>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
-
-          {generatedVideos.map((vid) => (
-            <CinematicVideoCard key={vid.id} video={vid}/>
-          ))}
+              );
+            });
+          })()}
 
           {isGeneratingMedia && (
             <div className="p-4 rounded-2xl bg-indigo-950/50 border border-indigo-500/40 flex items-center gap-3 text-xs text-indigo-200">
