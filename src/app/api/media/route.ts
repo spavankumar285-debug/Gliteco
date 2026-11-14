@@ -2,41 +2,57 @@ import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
+async function describeSubjectFromPhoto(referenceImage: string): Promise<string> {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey || !referenceImage.startsWith('data:image/')) return '';
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${groqKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'qwen/qwen3.8-27b',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Describe ONLY the person in this photo in 1 concise visual sentence (gender, approximate age, ethnicity/skin tone, exact hairstyle, facial features, expression) so an image generator can recreate the exact same person. No intro text.',
+              },
+              {
+                type: 'image_url',
+                image_url: { url: referenceImage },
+              },
+            ],
+          },
+        ],
+        temperature: 0.2,
+        reasoning_effort: 'low',
+        max_tokens: 220,
+      }),
+    });
+
+    if (!res.ok) return '';
+    const data = await res.json();
+    return (data?.choices?.[0]?.message?.content || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 async function generateCloudflareImage(
   accountId: string,
   apiToken: string,
   prompt: string,
-  referenceImage?: string
+  subjectDescription = ''
 ): Promise<string> {
-  if (referenceImage && referenceImage.startsWith('data:image/')) {
-    const base64Data = referenceImage.split(',')[1];
-    const imageBytes = Array.from(Buffer.from(base64Data, 'base64'));
-
-    const img2imgRes = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/runwayml/stable-diffusion-v1-5-img2img`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: `${prompt}, keep exact same person face and identity, photorealistic, high quality, sharp focus, 8k`,
-          image: imageBytes,
-          strength: 0.38,
-        }),
-      }
-    );
-
-    if (!img2imgRes.ok) {
-      const errTxt = await img2imgRes.text();
-      throw new Error(`img2img error (${img2imgRes.status}): ${errTxt.slice(0, 180)}`);
-    }
-
-    const arrayBuf = await img2imgRes.arrayBuffer();
-    const outBase64 = Buffer.from(arrayBuf).toString('base64');
-    return `data:image/png;base64,${outBase64}`;
-  }
+  const finalPrompt = subjectDescription
+    ? `Photorealistic portrait of ${subjectDescription}, ${prompt}, ultra detailed, cinematic lighting, sharp focus, 8k resolution`
+    : `${prompt}, ultra detailed, photorealistic, cinematic lighting, 8k resolution`;
 
   const fluxRes = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
@@ -47,7 +63,7 @@ async function generateCloudflareImage(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt: `${prompt}, ultra detailed, photorealistic, cinematic lighting, 8k resolution`,
+        prompt: finalPrompt,
         steps: 6,
       }),
     }
@@ -79,6 +95,8 @@ export async function POST(req: Request) {
       );
     }
 
+    const subjectDescription = referenceImage ? await describeSubjectFromPhoto(referenceImage) : '';
+
     if (type === 'video') {
       const scenes = [
         { suffix: 'wide establishing cinematic shot, golden hour lighting', caption: 'Scene 1 • Establishing Shot' },
@@ -89,13 +107,13 @@ export async function POST(req: Request) {
 
       const frames = [];
       for (const scene of scenes) {
-        const url = await generateCloudflareImage(accountId, apiToken, `${prompt}, ${scene.suffix}`, referenceImage);
+        const url = await generateCloudflareImage(accountId, apiToken, `${prompt}, ${scene.suffix}`, subjectDescription);
         frames.push({ url, caption: scene.caption });
       }
       return NextResponse.json({ frames });
     }
 
-    const url = await generateCloudflareImage(accountId, apiToken, prompt, referenceImage);
+    const url = await generateCloudflareImage(accountId, apiToken, prompt, subjectDescription);
     return NextResponse.json({ url });
   } catch (err: any) {
     console.error('Media API Error:', err);
