@@ -84,7 +84,7 @@ export async function POST(req: Request) {
         messages: [systemPrompt, ...finalMessages],
         temperature: 0.4,
         reasoning_effort: 'low',
-        max_tokens: 4096,
+        max_tokens: hasImage ? 900 : 4096,
       }),
     });
 
