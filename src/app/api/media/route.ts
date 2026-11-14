@@ -2,55 +2,50 @@ import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
-async function uploadTempImage(dataUrl: string): Promise<string | null> {
+async function describeSubjectFromPhoto(referenceImage: string): Promise<string> {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey || !referenceImage.startsWith('data:image/')) return '';
+
   try {
-    const [header, base64] = dataUrl.split(',');
-    const mime = header.match(/data:(.*?);/)?.[1] || 'image/jpeg';
-    const buffer = Buffer.from(base64, 'base64');
-    const blob = new Blob([buffer], { type: mime });
-
-    const form = new FormData();
-    form.append('file', blob, 'reference.jpg');
-
-    const res = await fetch('https://tmpfiles.org/api/v1/upload', {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      body: form,
+      headers: {
+        Authorization: `Bearer ${groqKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'qwen/qwen3.8-27b',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Describe the person in this photo for an editorial portrait: nationality/region (e.g. Indian/South Asian), gender, approximate age, face shape, exact hairstyle, eyebrows/eyes/smile, and glasses/jewelry in 20 family-friendly words.',
+              },
+              {
+                type: 'image_url',
+                image_url: { url: referenceImage },
+              },
+            ],
+          },
+        ],
+        temperature: 0.2,
+        reasoning_effort: 'low',
+        max_tokens: 140,
+      }),
     });
-    if (!res.ok) return null;
-    const json = await res.json();
-    const rawUrl: string | undefined = json?.data?.url;
-    if (!rawUrl) return null;
-    // Convert tmpfiles viewer URL to direct download URL
-    return rawUrl.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
+
+    if (!res.ok) return '';
+    const data = await res.json();
+    return (data?.choices?.[0]?.message?.content || '').replace(/["\n]/g, ' ').trim();
   } catch {
-    return null;
+    return '';
   }
 }
 
-async function editWithKontext(referenceImage: string, prompt: string): Promise<string> {
-  const publicUrl = await uploadTempImage(referenceImage);
-  if (!publicUrl) {
-    throw new Error('Could not prepare reference photo for editing. Please try a smaller image.');
-  }
-
-  const editPrompt = `${prompt}, preserve the exact same person face, facial features, skin tone, and identity from the input photo, photorealistic, high quality, 8k`;
-  const seed = Math.floor(Math.random() * 100000);
-  const kontextUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(editPrompt)}?model=kontext&image=${encodeURIComponent(publicUrl)}&width=1024&height=1024&seed=${seed}&nologo=true`;
-
-  const imgRes = await fetch(kontextUrl);
-  if (!imgRes.ok) {
-    throw new Error(`Face-edit engine busy (${imgRes.status}). Please click Regenerate.`);
-  }
-
-  const arrayBuf = await imgRes.arrayBuffer();
-  const base64Out = Buffer.from(arrayBuf).toString('base64');
-  return `data:image/jpeg;base64,${base64Out}`;
-}
-
-async function generateCloudflareImage(accountId: string, apiToken: string, prompt: string): Promise<string> {
-  const safePrompt = `Family-friendly photorealistic portrait, ${prompt.trim()}, cinematic lighting, sharp focus, 8k resolution`;
-
-  const fluxRes = await fetch(
+async function runFlux(accountId: string, apiToken: string, prompt: string) {
+  return fetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
     {
       method: 'POST',
@@ -59,11 +54,38 @@ async function generateCloudflareImage(accountId: string, apiToken: string, prom
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt: safePrompt,
+        prompt,
         steps: 6,
       }),
     }
   );
+}
+
+async function generateCloudflareImage(
+  accountId: string,
+  apiToken: string,
+  prompt: string,
+  subjectDescription = ''
+): Promise<string> {
+  const safeUserPrompt = prompt.trim() || 'royal portrait in front of a grand palace';
+  const primaryPrompt = subjectDescription
+    ? `Family-friendly photorealistic portrait of ${subjectDescription}, fully dressed in elegant modest attire, ${safeUserPrompt}, cinematic lighting, 8k`
+    : `Family-friendly photorealistic portrait, fully dressed in elegant modest attire, ${safeUserPrompt}, cinematic lighting, 8k`;
+
+  let fluxRes = await runFlux(accountId, apiToken, primaryPrompt);
+
+  if (!fluxRes.ok) {
+    const errText = await fluxRes.text();
+    if (errText.includes('8007') || errText.toLowerCase().includes('nsfw')) {
+      fluxRes = await runFlux(
+        accountId,
+        apiToken,
+        `Safe, family-friendly editorial portrait of ${safeUserPrompt}, fully clothed, high quality photography, 8k`
+      );
+    } else {
+      throw new Error(`Cloudflare AI error (${fluxRes.status}): ${errText.slice(0, 200)}`);
+    }
+  }
 
   if (!fluxRes.ok) {
     const errText = await fluxRes.text();
@@ -91,6 +113,8 @@ export async function POST(req: Request) {
       );
     }
 
+    const subjectDescription = referenceImage ? await describeSubjectFromPhoto(referenceImage) : '';
+
     if (type === 'video') {
       const scenes = [
         { suffix: 'wide establishing cinematic shot, golden hour lighting', caption: 'Scene 1 • Establishing Shot' },
@@ -101,18 +125,13 @@ export async function POST(req: Request) {
 
       const frames = [];
       for (const scene of scenes) {
-        const url = referenceImage
-          ? await editWithKontext(referenceImage, `${prompt}, ${scene.suffix}`)
-          : await generateCloudflareImage(accountId, apiToken, `${prompt}, ${scene.suffix}`);
+        const url = await generateCloudflareImage(accountId, apiToken, `${prompt}, ${scene.suffix}`, subjectDescription);
         frames.push({ url, caption: scene.caption });
       }
       return NextResponse.json({ frames });
     }
 
-    const url = referenceImage
-      ? await editWithKontext(referenceImage, prompt)
-      : await generateCloudflareImage(accountId, apiToken, prompt);
-
+    const url = await generateCloudflareImage(accountId, apiToken, prompt, subjectDescription);
     return NextResponse.json({ url });
   } catch (err: any) {
     console.error('Media API Error:', err);
