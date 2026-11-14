@@ -8,7 +8,6 @@ async function generateCloudflareImage(
   prompt: string,
   referenceImage?: string
 ): Promise<string> {
-  // If a reference photo is provided, use Cloudflare's img2img model so the actual face/subject is preserved
   if (referenceImage && referenceImage.startsWith('data:image/')) {
     const base64Data = referenceImage.split(',')[1];
     const imageBytes = Array.from(Buffer.from(base64Data, 'base64'));
@@ -25,18 +24,20 @@ async function generateCloudflareImage(
           prompt: `${prompt}, keep exact same person face and identity, photorealistic, high quality, sharp focus, 8k`,
           image: imageBytes,
           strength: 0.38,
-          }),
+        }),
       }
     );
 
-    if (!img2imgRes.ok) { const errTxt = await img2imgRes.text(); throw new Error("img2img error: " + errTxt.slice(0, 180)); }
-      const arrayBuf = await img2imgRes.arrayBuffer();
-      const outBase64 = Buffer.from(arrayBuf).toString('base64');
-      return `data:image/png;base64,${outBase64`;
+    if (!img2imgRes.ok) {
+      const errTxt = await img2imgRes.text();
+      throw new Error(`img2img error (${img2imgRes.status}): ${errTxt.slice(0, 180)}`);
     }
+
+    const arrayBuf = await img2imgRes.arrayBuffer();
+    const outBase64 = Buffer.from(arrayBuf).toString('base64');
+    return `data:image/png;base64,${outBase64}`;
   }
 
-  // Standard text-to-image generation with FLUX.1 Schnell
   const fluxRes = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
     {
