@@ -26,8 +26,7 @@ async function generateCloudflareImage(
           image: imageBytes,
           strength: 0.55,
           guidance: 7.5,
-          num_steps: 20,
-        }),
+          }),
       }
     );
 
@@ -49,7 +48,7 @@ async function generateCloudflareImage(
       },
       body: JSON.stringify({
         prompt: `${prompt}, ultra detailed, photorealistic, cinematic lighting, 8k resolution`,
-        num_steps: 6,
+        steps: 6,
       }),
     }
   );
