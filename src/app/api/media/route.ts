@@ -24,16 +24,15 @@ async function generateCloudflareImage(
         body: JSON.stringify({
           prompt: `${prompt}, keep exact same person face and identity, photorealistic, high quality, sharp focus, 8k`,
           image: imageBytes,
-          strength: 0.55,
-          guidance: 7.5,
+          strength: 0.38,
           }),
       }
     );
 
-    if (img2imgRes.ok) {
+    if (!img2imgRes.ok) { const errTxt = await img2imgRes.text(); throw new Error("img2img error: " + errTxt.slice(0, 180)); }
       const arrayBuf = await img2imgRes.arrayBuffer();
       const outBase64 = Buffer.from(arrayBuf).toString('base64');
-      return `data:image/png;base64,${outBase64}`;
+      return `data:image/png;base64,${outBase64`;
     }
   }
 
