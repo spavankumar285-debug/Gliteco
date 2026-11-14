@@ -21,7 +21,7 @@ async function describeSubjectFromPhoto(referenceImage: string): Promise<string>
             content: [
               {
                 type: 'text',
-                text: 'Describe ONLY the hairstyle, glasses/accessories, and general age group (e.g. young woman or young man) in 10 safe, family-friendly words. Do not mention body parts, skin, or clothing.',
+                text: 'Describe the person in this photo for an editorial portrait: nationality/region (e.g. Indian/South Asian), gender, approximate age, face shape, exact hairstyle, eyebrows/eyes/smile, and glasses/jewelry in 20 family-friendly words.',
               },
               {
                 type: 'image_url',

@@ -1202,6 +1202,13 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
 
         {/* Input Bar */}
         <footer className="p-3 border-t border-zinc-800 bg-zinc-950 shrink-0">
+          {lastUploadedImage && attachments.length === 0 && (
+            <div className="max-w-3xl mx-auto flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-indigo-950/60 border border-indigo-500/40 text-xs text-indigo-200">
+              <img src={lastUploadedImage} alt="Reference" className="w-6 h-6 rounded object-cover" />
+              <span>Reference photo active for next image/video edit</span>
+              <button type="button" onClick={() => setLastUploadedImage(undefined)} className="ml-auto text-zinc-400 hover:text-red-400">Clear</button>
+            </div>
+          )}
           {attachments.length > 0 && (
             <div className="max-w-3xl mx-auto flex flex-wrap gap-2 mb-2.5">
               {attachments.map((att) => (
