@@ -41,6 +41,7 @@ import {
   Video,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import PptxGenJS from 'pptxgenjs';
 
 type GeneratedVideoItem = {
@@ -637,23 +638,254 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
     URL.revokeObjectURL(url);
   };
 
-  const downloadPDF = (text: string) => {
-    const doc = new jsPDF();
-    doc.setFontSize(14);
-    doc.text(`${brandName} Document`, 14, 18);
-    doc.setFontSize(10);
-    const lines = doc.splitTextToSize(text, 180);
-    let y = 28;
-    lines.forEach((line: string) => {
-      if (y > 280) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.text(line, 14, y);
-      y += 6;
-    });
-    doc.save(`${brandName.toLowerCase()}-doc.pdf`);
+  
+const downloadPDF = (text: string) => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 18;
+  const usableWidth = pageWidth - margin * 2;
+
+  let y = 20;
+  let firstHeading = true;
+
+  const cleanText = (value: string) =>
+    value
+      .replace(/\r/g, '')
+      .replace(/```[\w-]*\n?/g, '')
+      .replace(/```/g, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/!\[.*?\]\(.*?\)/g, '')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '$1')
+      .replace(/^\s*---\s*$/gm, '')
+      .trim();
+
+  const addPageIfNeeded = (height: number) => {
+    if (y + height > pageHeight - 18) {
+      doc.addPage();
+      y = 20;
+    }
   };
+
+  const addFooter = () => {
+    const pageCount = doc.getNumberOfPages();
+
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(
+        `Created with ${brandName}  |  Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        pageHeight - 9,
+        { align: 'center' }
+      );
+    }
+  };
+
+  const addParagraph = (value: string) => {
+    const cleaned = value
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/^\s*>\s?/gm, '')
+      .trim();
+
+    if (!cleaned) return;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(55, 65, 81);
+
+    const lines = doc.splitTextToSize(cleaned, usableWidth);
+    const lineHeight = 5.5;
+
+    addPageIfNeeded(lines.length * lineHeight + 4);
+    doc.text(lines, margin, y);
+    y += lines.length * lineHeight + 5;
+  };
+
+  const addHeading = (value: string, level: number) => {
+    const heading = value.replace(/[*_`]/g, '').trim();
+    if (!heading) return;
+
+    const fontSize = level === 1 ? 19 : level === 2 ? 15 : 12;
+    const spacing = level === 1 ? 11 : 8;
+
+    addPageIfNeeded(fontSize + spacing);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(fontSize);
+    doc.setTextColor(31, 41, 55);
+
+    const lines = doc.splitTextToSize(heading, usableWidth);
+    doc.text(lines, margin, y);
+    y += lines.length * (fontSize * 0.42) + spacing;
+  };
+
+  const addBullet = (value: string, numbered = false) => {
+    const cleaned = value
+      .replace(/^\s*[-*+]\s+/, '')
+      .replace(/^\s*\d+[.)]\s+/, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .trim();
+
+    if (!cleaned) return;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(55, 65, 81);
+
+    const lines = doc.splitTextToSize(cleaned, usableWidth - 8);
+    addPageIfNeeded(lines.length * 5.5 + 3);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(numbered ? '•' : '•', margin + 1, y);
+
+    doc.setFont('helvetica', 'normal');
+    doc.text(lines, margin + 7, y);
+    y += lines.length * 5.5 + 3;
+  };
+
+  const addTable = (rows: string[][]) => {
+    if (rows.length < 2) return;
+
+    const normalizedRows = rows.map((row) =>
+      row.map((cell) =>
+        cell
+          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/\*\*(.*?)\*\*/g, '$1')
+          .replace(/`([^`]+)`/g, '$1')
+          .trim()
+      )
+    );
+
+    const headers = normalizedRows[0];
+    const body = normalizedRows
+      .slice(1)
+      .filter((row) => !row.every((cell) => /^[-:\s]+$/.test(cell)))
+      .map((row) =>
+        headers.map((_, index) => row[index] || '')
+      );
+
+    if (!body.length) return;
+
+    autoTable(doc, {
+      startY: y,
+      head: [headers],
+      body,
+      margin: { left: margin, right: margin, bottom: 18 },
+      theme: 'grid',
+      styles: {
+        font: 'helvetica',
+        fontSize: 8,
+        cellPadding: 3,
+        overflow: 'linebreak',
+        textColor: [55, 65, 81],
+      },
+      headStyles: {
+        fillColor: [37, 65, 120],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+      },
+      alternateRowStyles: {
+        fillColor: [245, 247, 250],
+      },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 9;
+  };
+
+  // Professional document header
+  doc.setFillColor(24, 39, 75);
+  doc.rect(0, 0, pageWidth, 38, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(19);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`${brandName} Document`, margin, 17);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(220, 228, 240);
+  doc.text('Prepared with AI assistance', margin, 26);
+
+  y = 42;
+
+  const lines = cleanText(text).split('\n');
+  let paragraphBuffer: string[] = [];
+  let tableBuffer: string[][] = [];
+
+  const flushParagraph = () => {
+    if (paragraphBuffer.length) {
+      addParagraph(paragraphBuffer.join(' '));
+      paragraphBuffer = [];
+    }
+  };
+
+  const flushTable = () => {
+    if (tableBuffer.length) {
+      addTable(tableBuffer);
+      tableBuffer = [];
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      flushParagraph();
+      flushTable();
+      continue;
+    }
+
+    if (line.startsWith('|')) {
+      flushParagraph();
+
+      const cells = line
+        .split('|')
+        .slice(1, -1)
+        .map((cell) => cell.trim());
+
+      tableBuffer.push(cells);
+      continue;
+    }
+
+    flushTable();
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+
+    if (headingMatch) {
+      flushParagraph();
+      addHeading(headingMatch[2], headingMatch[1].length);
+      firstHeading = false;
+      continue;
+    }
+
+    if (/^[-*+]\s+/.test(line) || /^\d+[.)]\s+/.test(line)) {
+      flushParagraph();
+      addBullet(line);
+      continue;
+    }
+
+    paragraphBuffer.push(line);
+  }
+
+  flushParagraph();
+  flushTable();
+
+  addFooter();
+
+  doc.save(`${brandName.toLowerCase()}-document.pdf`);
+};
+
 
   const downloadPPT = async (text: string) => {
     const pptx = new PptxGenJS();
