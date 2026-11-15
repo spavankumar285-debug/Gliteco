@@ -47,7 +47,7 @@ import PptxGenJS from 'pptxgenjs';
 type GeneratedVideoItem = {
   id: string;
   prompt: string;
-  frames: { url: string; caption: string }[];
+  videoUrl: string;
 };
 
 type SavedSession = {
@@ -123,20 +123,6 @@ function buildImageUrl(rawPrompt: string, width = 1024, height = 1024, seedOffse
 }
 
 function CinematicVideoCard({ video }: { video: GeneratedVideoItem }) {
-  const [frameIndex, setFrameIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [loadedCount, setLoadedCount] = useState(0);
-
-  useEffect(() => {
-    if (!isPlaying) return;
-    const timer = setInterval(() => {
-      setFrameIndex((prev) => (prev + 1) % video.frames.length);
-    }, 3200);
-    return () => clearInterval(timer);
-  }, [isPlaying, video.frames.length]);
-
-  const currentFrame = video.frames[frameIndex] || video.frames[0];
-
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
@@ -144,60 +130,33 @@ function CinematicVideoCard({ video }: { video: GeneratedVideoItem }) {
           {video.prompt}
         </div>
       </div>
-      <div className="flex justify-start">
-        <div className="w-full max-w-xl rounded-2xl p-3 bg-zinc-900 border border-zinc-800 space-y-2.5 shadow-xl">
-          <div className="flex items-center justify-between text-xs text-indigo-300 font-medium px-1">
-            <span className="flex items-center gap-1.5">
-              <Video className="w-3.5 h-3.5 text-indigo-400" /> AI Motion Video • Scene {frameIndex + 1} of{' '}
-              {video.frames.length}
-            </span>
-            <span className="text-[11px] text-zinc-400">
-              {loadedCount < video.frames.length ? 'Rendering HD frames...' : '16:9 HD Ready'}
-            </span>
-          </div>
-
-          <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-zinc-950 border border-zinc-800">
-            {video.frames.map((frame, idx) => (
-              <img
-                key={idx}
-                src={frame.url}
-                alt={frame.caption}
-                onLoad={() => setLoadedCount((c) => Math.min(video.frames.length, c + 1))}
-                className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out ${
-                  idx === frameIndex ? 'opacity-100 scale-105' : 'opacity-0 scale-100 pointer-events-none'
-                }`}
-              />
-            ))}
-
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-8">
-              <p className="text-xs sm:text-sm font-medium text-white drop-shadow">{currentFrame?.caption}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 pt-0.5">
-            <button
-              type="button"
-              onClick={() => setIsPlaying(!isPlaying)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
-            >
-              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-              {isPlaying ? 'Pause' : 'Play'}
-            </button>
-
-            <div className="flex-1 flex gap-1.5">
-              {video.frames.map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setFrameIndex(idx)}
-                  className={`h-2 flex-1 rounded-full transition-all ${ idx === frameIndex ? 'bg-indigo-500' : 'bg-zinc-700 hover:bg-zinc-600' }`} title={`Scene ${idx + 1}`}
-                />
-              ))}
-            </div>
-
-            <a
-              href={currentFrame?.url}
-              download={`gliteco-scene-${frameIndex + 1}.jpg`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200" > <Download className="w-3.5 h-3.5" /> Frame </a> </div> </div> </div> </div> ); }  export default function Home() { const [mounted, setMounted] = useState(false); const [user, setUser] = useState<GlitecoUser | null>(null);  useEffect(() => { setMounted(true); try { const savedUser = localStorage.getItem('gliteco_user_profile_v1'); if (savedUser) { setUser(JSON.parse(savedUser)); } } catch {} }, []);  if (!mounted) { return <div className="h-screen bg-zinc-950" />; }  const handleAuthSuccess = (profile: GlitecoUser) => { setUser(profile); try { localStorage.setItem('gliteco_user_profile_v1', JSON.stringify(profile)); } catch {} };  const handleSignOut = () => { setUser(null); try { localStorage.removeItem('gliteco_user_profile_v1'); } catch {} };  if (!user) { return <GlitecoAuthScreen onComplete={handleAuthSuccess} />; }  return <GlitecoStudio user={user} onSignOut={handleSignOut} />; }  function GlitecoAuthScreen({ onComplete }: { onComplete: (u: GlitecoUser) => void }) { const brandName = process.env.NEXT_PUBLIC_APP_NAME || 'Gliteco'; const [isSignUp, setIsSignUp] = useState(false); const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [formError, setFormError] = useState('');  const handleEmailSubmit = (e: React.FormEvent) => { e.preventDefault(); setFormError('');  const trimmedEmail = email.trim(); if (!trimmedEmail || !trimmedEmail.includes('@')) { setFormError('Please enter a valid email address.'); return; } if (password.trim().length < 4) { setFormError('Please enter a password (at least 4 characters).'); return; }  const displayName = name.trim() || trimmedEmail .split('@')[0] .replace(/[._-]/g, ' ') .replace(/\b\w/g, (l) => l.toUpperCase());  onComplete({ name: displayName, email: trimmedEmail, isGuest: false, }); };  const handleContinueGuest = () => { onComplete({ name: 'Guest Explorer', email: '', isGuest: true, }); };  return ( <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden"> <div className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full bg-indigo-600/20 blur-[120px]" />  <header className="max-w-5xl w-full mx-auto flex items-center justify-between py-2 relative z-10"> <div className="flex items-center gap-2.5"> <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/30"> <Sparkles className="w-5 h-5 text-white" /> </div> <span className="font-bold text-xl tracking-tight">{brandName}</span> </div> <button onClick={handleContinueGuest} className="text-xs font-medium text-zinc-400 hover:text-white transition flex items-center gap-1" > Skip for now <ArrowRight className="w-3.5 h-3.5" /> </button> </header>  <main className="max-w-md w-full mx-auto my-auto py-6 relative z-10"> <div className="bg-zinc-900/90 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6"> <div className="text-center space-y-2.5"> <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-xl shadow-indigo-600/30 ring-1 ring-white/20"> <Sparkles className="w-8 h-8 text-white" /> </div> <h1 className="text-2xl font-bold tracking-tight pt-1">Welcome to {brandName}</h1> <p className="text-xs sm:text-sm text-zinc-400"> All-rounder AI for instant chat, live app building, HD image & video creation, PPTs, and vision analysis. </p> </div>  <form onSubmit={handleEmailSubmit} className="space-y-3.5"> {isSignUp && ( <div className="relative"> <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div> )}  <div className="relative"> <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email address" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div>  <div className="relative"> <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div>  {formError && <p className="text-xs text-red-400 text-center">{formError}</p>}  <button type="submit" className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2" > <Mail className="w-4 h-4" /> {isSignUp ? 'Create Gliteco Account' : 'Sign In with Email'} </button> </form>  <div className="text-center"> <button type="button" onClick={() => { setIsSignUp(!isSignUp); setFormError(''); }} className="text-xs text-indigo-400 hover:text-indigo-300 font-medium" > {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Create one free"} </button> </div>  <div className="relative flex items-center py-0.5"> <div className="flex-grow border-t border-zinc-800" /> <span className="shrink mx-3 text-[11px] uppercase tracking-wider text-zinc-500">or</span> <div className="flex-grow border-t border-zinc-800" /> </div>  <button type="button" onClick={handleContinueGuest} className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-100 font-semibold text-sm transition flex items-center justify-center gap-2" > Continue without Sign In <ArrowRight className="w-4 h-4 text-indigo-400" /> </button>  <div className="pt-2 border-t border-zinc-800/80 grid grid-cols-3 gap-2 text-center text-[11px] text-zinc-400"> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>100\% Free AI</span> </div> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>Image & Video AI</span> </div> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>App & PPT Maker</span> </div> </div> </div> </main>  <footer className="text-center text-[11px] text-zinc-500 py-2 relative z-10"> {brandName}.ai • Created by Pavan and Shalini (CEO and CFO) of Gliteco </footer> </div> ); }  async function compressImageFile(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => { const img = new Image(); img.onload = () => { const maxDim = 1024; let { width, height } = img; if (width > maxDim || height > maxDim) { if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; } else { width = Math.round((width * maxDim) / height); height = maxDim; } } const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx?.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.8)); }; img.onerror = reject; img.src = reader.result as string; }; reader.onerror = reject; reader.readAsDataURL(file); }); }  async function extractVideoFrames(file: File): Promise<string[]> { return new Promise((resolve) => { const video = document.createElement('video'); video.preload = 'metadata'; video.muted = true; video.playsInline = true; const objectUrl = URL.createObjectURL(file); video.src = objectUrl;  video.onloadedmetadata = async () => { const duration = video.duration || 1; const timestamps = [0.15 * duration, 0.5 * duration, 0.85 * duration]; const frames: string[] = [];  for (const time of timestamps) { await new Promise<void>((res) => { video.currentTime = Math.min(time, Math.max(duration - 0.1, 0)); video.onseeked = () => { const canvas = document.createElement('canvas'); const scale = Math.min(720 / (video.videoWidth || 720), 1); canvas.width = (video.videoWidth || 640) * scale; canvas.height = (video.videoHeight || 360) * scale; const ctx = canvas.getContext('2d'); ctx?.drawImage(video, 0, 0, canvas.width, canvas.height); frames.push(canvas.toDataURL('image/jpeg', 0.75)); res(); }; }); }  URL.revokeObjectURL(objectUrl); resolve(frames); };  video.onerror = () => { URL.revokeObjectURL(objectUrl); resolve([]); }; }); }  async function extractDocumentText(file: File): Promise<string> { if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) { const pdfjsLib = await import('pdfjs-dist'); pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+      <div className="w-full max-w-xl rounded-2xl p-3 bg-zinc-900 border border-zinc-800 space-y-3 shadow-xl">
+        <div className="flex justify-between items-center text-xs text-indigo-300">
+          <span className="flex items-center gap-2">
+            <Video className="w-4 h-4" /> Gliteco AI Video
+          </span>
+          <span className="text-emerald-400">MP4 Ready</span>
+        </div>
+        <video
+          src={video.videoUrl}
+          controls
+          autoPlay
+          loop
+          playsInline
+          className="w-full aspect-video rounded-xl bg-black object-contain"
+        />
+        <a
+          href={video.videoUrl}
+          download="gliteco-ai-video.mp4"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold"
+        >
+          <Download className="w-4 h-4" /> Download Video
+        </a>
+      </div>
+    </div>
+  );
+}
+export default function Home() { const [mounted, setMounted] = useState(false); const [user, setUser] = useState<GlitecoUser | null>(null);  useEffect(() => { setMounted(true); try { const savedUser = localStorage.getItem('gliteco_user_profile_v1'); if (savedUser) { setUser(JSON.parse(savedUser)); } } catch {} }, []);  if (!mounted) { return <div className="h-screen bg-zinc-950" />; }  const handleAuthSuccess = (profile: GlitecoUser) => { setUser(profile); try { localStorage.setItem('gliteco_user_profile_v1', JSON.stringify(profile)); } catch {} };  const handleSignOut = () => { setUser(null); try { localStorage.removeItem('gliteco_user_profile_v1'); } catch {} };  if (!user) { return <GlitecoAuthScreen onComplete={handleAuthSuccess} />; }  return <GlitecoStudio user={user} onSignOut={handleSignOut} />; }  function GlitecoAuthScreen({ onComplete }: { onComplete: (u: GlitecoUser) => void }) { const brandName = process.env.NEXT_PUBLIC_APP_NAME || 'Gliteco'; const [isSignUp, setIsSignUp] = useState(false); const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [formError, setFormError] = useState('');  const handleEmailSubmit = (e: React.FormEvent) => { e.preventDefault(); setFormError('');  const trimmedEmail = email.trim(); if (!trimmedEmail || !trimmedEmail.includes('@')) { setFormError('Please enter a valid email address.'); return; } if (password.trim().length < 4) { setFormError('Please enter a password (at least 4 characters).'); return; }  const displayName = name.trim() || trimmedEmail .split('@')[0] .replace(/[._-]/g, ' ') .replace(/\b\w/g, (l) => l.toUpperCase());  onComplete({ name: displayName, email: trimmedEmail, isGuest: false, }); };  const handleContinueGuest = () => { onComplete({ name: 'Guest Explorer', email: '', isGuest: true, }); };  return ( <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden"> <div className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full bg-indigo-600/20 blur-[120px]" />  <header className="max-w-5xl w-full mx-auto flex items-center justify-between py-2 relative z-10"> <div className="flex items-center gap-2.5"> <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/30"> <Sparkles className="w-5 h-5 text-white" /> </div> <span className="font-bold text-xl tracking-tight">{brandName}</span> </div> <button onClick={handleContinueGuest} className="text-xs font-medium text-zinc-400 hover:text-white transition flex items-center gap-1" > Skip for now <ArrowRight className="w-3.5 h-3.5" /> </button> </header>  <main className="max-w-md w-full mx-auto my-auto py-6 relative z-10"> <div className="bg-zinc-900/90 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6"> <div className="text-center space-y-2.5"> <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-xl shadow-indigo-600/30 ring-1 ring-white/20"> <Sparkles className="w-8 h-8 text-white" /> </div> <h1 className="text-2xl font-bold tracking-tight pt-1">Welcome to {brandName}</h1> <p className="text-xs sm:text-sm text-zinc-400"> All-rounder AI for instant chat, live app building, HD image & video creation, PPTs, and vision analysis. </p> </div>  <form onSubmit={handleEmailSubmit} className="space-y-3.5"> {isSignUp && ( <div className="relative"> <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div> )}  <div className="relative"> <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email address" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div>  <div className="relative"> <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" /> <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition" /> </div>  {formError && <p className="text-xs text-red-400 text-center">{formError}</p>}  <button type="submit" className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2" > <Mail className="w-4 h-4" /> {isSignUp ? 'Create Gliteco Account' : 'Sign In with Email'} </button> </form>  <div className="text-center"> <button type="button" onClick={() => { setIsSignUp(!isSignUp); setFormError(''); }} className="text-xs text-indigo-400 hover:text-indigo-300 font-medium" > {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Create one free"} </button> </div>  <div className="relative flex items-center py-0.5"> <div className="flex-grow border-t border-zinc-800" /> <span className="shrink mx-3 text-[11px] uppercase tracking-wider text-zinc-500">or</span> <div className="flex-grow border-t border-zinc-800" /> </div>  <button type="button" onClick={handleContinueGuest} className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-100 font-semibold text-sm transition flex items-center justify-center gap-2" > Continue without Sign In <ArrowRight className="w-4 h-4 text-indigo-400" /> </button>  <div className="pt-2 border-t border-zinc-800/80 grid grid-cols-3 gap-2 text-center text-[11px] text-zinc-400"> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>100\% Free AI</span> </div> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>Image & Video AI</span> </div> <div className="flex flex-col items-center gap-1"> <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> <span>App & PPT Maker</span> </div> </div> </div> </main>  <footer className="text-center text-[11px] text-zinc-500 py-2 relative z-10"> {brandName}.ai • Created by Pavan and Shalini (CEO and CFO) of Gliteco </footer> </div> ); }  async function compressImageFile(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => { const img = new Image(); img.onload = () => { const maxDim = 1024; let { width, height } = img; if (width > maxDim || height > maxDim) { if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; } else { width = Math.round((width * maxDim) / height); height = maxDim; } } const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx?.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.8)); }; img.onerror = reject; img.src = reader.result as string; }; reader.onerror = reject; reader.readAsDataURL(file); }); }  async function extractVideoFrames(file: File): Promise<string[]> { return new Promise((resolve) => { const video = document.createElement('video'); video.preload = 'metadata'; video.muted = true; video.playsInline = true; const objectUrl = URL.createObjectURL(file); video.src = objectUrl;  video.onloadedmetadata = async () => { const duration = video.duration || 1; const timestamps = [0.15 * duration, 0.5 * duration, 0.85 * duration]; const frames: string[] = [];  for (const time of timestamps) { await new Promise<void>((res) => { video.currentTime = Math.min(time, Math.max(duration - 0.1, 0)); video.onseeked = () => { const canvas = document.createElement('canvas'); const scale = Math.min(720 / (video.videoWidth || 720), 1); canvas.width = (video.videoWidth || 640) * scale; canvas.height = (video.videoHeight || 360) * scale; const ctx = canvas.getContext('2d'); ctx?.drawImage(video, 0, 0, canvas.width, canvas.height); frames.push(canvas.toDataURL('image/jpeg', 0.75)); res(); }; }); }  URL.revokeObjectURL(objectUrl); resolve(frames); };  video.onerror = () => { URL.revokeObjectURL(objectUrl); resolve([]); }; }); }  async function extractDocumentText(file: File): Promise<string> { if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) { const pdfjsLib = await import('pdfjs-dist'); pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     let fullText = '';
@@ -520,12 +479,31 @@ function GlitecoStudio({ user, onSignOut }: { user: GlitecoUser; onSignOut: () =
             referenceImage: refImg,
           }),
         });
-        const data = await res.json();
-        if (!res.ok || !data.frames) throw new Error(data.error || 'Video generation failed');
-        setGeneratedVideos((prev) => [
-          ...prev,
-          { id: String(Date.now()), prompt: trimmed || 'Photo Motion Video', frames: data.frames },
-        ]);
+        if (!res.ok) {
+  const errorText = await res.text();
+  let message = errorText || 'Video generation failed';
+  try {
+    message = JSON.parse(errorText).error || message;
+  } catch {}
+  throw new Error(message);
+}
+
+const blob = await res.blob();
+
+if (!blob.size || !blob.type.startsWith('video/')) {
+  throw new Error('Server did not return a valid video file.');
+}
+
+const videoUrl = URL.createObjectURL(blob);
+
+setGeneratedVideos((prev) => [
+  ...prev,
+  {
+    id: String(Date.now()),
+    prompt: trimmed || 'Photo Motion Video',
+    videoUrl,
+  },
+]);
       } catch (err: any) {
         alert(err?.message || 'Could not generate video.');
       } finally {
